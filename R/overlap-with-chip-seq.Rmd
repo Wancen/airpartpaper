@@ -12,7 +12,7 @@ suppressMessages(suppressWarnings(library(data.table)))
 suppressMessages(suppressWarnings(library(plyranges)))
 suppressMessages(suppressWarnings(library(tidyverse)))
 suppressMessages(suppressWarnings(library(devtools)))
-load_all("..")
+load_all("../data/larsson")
 ```
 
 

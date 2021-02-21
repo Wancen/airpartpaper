@@ -1,0 +1,39 @@
+---
+title: "goenrichment"
+author: "wancen"
+date: "2/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+i=7 
+feat<-which(cluster==i) # choose genes location
+# i=1
+# feat2<-which(cluster==i)
+# feat2<-sample(feat2,size = length(feat))
+# genes <- rep(c(1,0),each=length(feat))
+genes <- rep(1,each=length(feat))
+library(goseq)
+# names(genes) <- mapIds(org.Mm.eg.db, c(names(feat),names(feat2)),"ENSEMBL", "SYMBOL")
+names(genes) <- mapIds(org.Mm.eg.db, c(names(feat)),"ENSEMBL", "SYMBOL")
+not.na <- !is.na(names(genes))
+genes<-genes[not.na]
+genes <- genes[!duplicated(names(genes))]
+pwf <- nullp(genes, "mm9", "ensGene") # some warnings expected
+gores <- goseq(pwf, "mm9", "ensGene") # some warnings expected
+print(knitr::kable(head(gores,20)))
+table(gores$ontology)
+```
+
+```{r}
+library(DOSE)
+go.names<-names(feat)
+edo <- enrichDGN(go.names)
+
+```
+

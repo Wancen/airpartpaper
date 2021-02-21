@@ -33,7 +33,7 @@ g <- genes(txdb)
 g$sym <- mapIds(org.Mm.eg.db, sub("\\..*","",names(g)), "SYMBOL", "ENSEMBL")
 g <- g[!is.na(g$sym)]
 # define promoter regions
-gene_prom <- promoters(x = g, upstream = 50000, downstream = 50000)
+gene_prom <- promoters(x = g, upstream = 100000, downstream = 100000)
 
 
 
@@ -131,5 +131,5 @@ obj<-pbsapply(1:100,function(i){
   res<-chisq.test(matrix(c(int_genes,other_genes[,i]),ncol=2,byrow = T))
   return(res$p.value)
 })
-
+obj[order(obj)]
 ```

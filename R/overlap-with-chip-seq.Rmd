@@ -20,22 +20,26 @@ library(airpart)
 ```{r}
 mESC<-read_narrowpeaks("../data/mESC.narrowPeak",genome_info = "mm9")
 colnames(mcols(mESC))<-c("name","score","fold_enrichment","-log(pvalue)","-log(FDR)/log(10)","summit")
-mESC_filter<-mESC[which(mcols(mESC)$fold_enrichment>10)]
+mESC_filter<-mESC[which(mcols(mESC)$"-log(FDR)/log(10)" > 2)]
 
 mef<-read_narrowpeaks("../data/mef.narrowPeak",genome_info = "mm9")
 colnames(mcols(mef))<-c("name","score","fold_enrichment","-log(pvalue)","-log(FDR)/log(10)","summit")
-mef_filter<-mef[which(mcols(mef)$fold_enrichment>10)]
+mef_filter<-mef[which(mcols(mef)$"-log(FDR)/log(10)" > 2)]
 
 suppressMessages(suppressWarnings(library(GenomicFeatures)))
 suppressMessages(suppressWarnings(library("org.Mm.eg.db")))
+
 txdb <- makeTxDbFromGFF("ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M1/gencode.vM1.annotation.gtf.gz")
+saveDb(txdb, file="gencode.vM1.sqlite")
+txdb <- loadDb("gencode.vM1.sqlite")
+
 g <- genes(txdb)
+genome(g) <- "mm9"
 g$sym <- mapIds(org.Mm.eg.db, sub("\\..*","",names(g)), "SYMBOL", "ENSEMBL")
 g <- g[!is.na(g$sym)]
-# define promoter regions
-gene_prom <- promoters(x = g, upstream = 100000, downstream = 100000)
 
-
+# these are actually not promoters, but a wide net for enhancers
+gene_prom <- promoters(g, upstream=5e4, downstream=5e4)
 
 ## Get allelic imbalance genes
 get_overlap<-function(gene_prom,feat,mef,mESC){
@@ -49,13 +53,13 @@ get_overlap<-function(gene_prom,feat,mef,mESC){
   mESC_ov2 <- mESC_ov %>%
     group_by(sym) %>%
     summarize(
-      fold_enrichment=max(fold_enrichment),
+      fold_enrichment=mean(fold_enrichment),
       peak_count=sum(!is.na(fold_enrichment)))
   
   mef_ov2 <- mef_ov %>%
     group_by(sym) %>%
     summarize(
-      fold_enrichment=max(fold_enrichment),
+      fold_enrichment=mean(fold_enrichment),
       peak_count=sum(!is.na(fold_enrichment)))
   
   enrich<-merge(mESC_ov2,mef_ov2,by="sym",all=T)
@@ -69,12 +73,15 @@ load("../data/larsson_postprocess.rda")
 nct<-length(cell_meta_unique) # number of cell types
 ratio<-c57_fil/total_fil
 ratio_pseudo<-(c57_fil+2)/(total_fil+4)
+set.seed(5)
 cluster<-genecluster(ratio_pseudo,nct,G=c(4,12,20,24,28,32))
 table(cluster)
 ```
+
 # Genes of interest
+
 ```{r}
-i=7
+i<-7
 feat<-which(cluster==i) # choose genes location
 cl_ratio<-as.vector(unlist(ratio[feat,]))
 cl_total<-as.vector(unlist(total_fil[feat,]))
@@ -82,17 +89,21 @@ dat<-tibble(ratio=cl_ratio,x=factor(rep(as.vector(celltypeQC[,1]),each=length(fe
 summary<-dat %>% group_by(x) %>% summarise(weighted.mean=weighted.mean(ratio,cts,na.rm = T),mean=mean(ratio,na.rm = T),var=var(ratio,na.rm = T)) %>% data.frame()
 summary2<-summary[order(summary$weighted.mean),]
 # if(max(diff(summary2$weighted.mean))>0.1){
-    print(paste("cluster",i,"has",length(feat),"genes exists allelic ratio imbalance"))
-    print(knitr::kable(summary)) #check summary table
-    overlaptxb<-get_overlap(gene_prom,names(feat),mef_filter,mESC_filter)
-    print(knitr::kable(overlaptxb))
+print(paste("cluster",i,"has",length(feat),"genes exists allelic ratio imbalance"))
+print(knitr::kable(summary)) #check summary table
+
+overlaptxb<-get_overlap(gene_prom,names(feat),mef_filter,mESC_filter)
+print(knitr::kable(overlaptxb))
+
+# note: n=18
+sum(names(feat) %in% g$sym)
+
 # }
 # overlap<-as.data.frame(overlaptxb)
 # overlap[is.na(overlap)] <- 0
 # wilcox.test(overlap$peak_count.x,overlap$peak_count.y,alternative = "g",paired = T) # 0 replace NA
 # wilcox.test(overlaptxb$peak_count.x,overlaptxb$peak_count.y,alternative = "g",paired = T) # still NA
-int_genes<-c(sum(overlaptxb$peak_count.x,na.rm = T),sum(overlaptxb$peak_count.y,na.rm = T))
-
+int_genes<-c(sum(overlaptxb$peak_count.x,na.rm = TRUE),sum(overlaptxb$peak_count.y,na.rm = TRUE))
 ```
 
 # Other genes
@@ -107,8 +118,19 @@ print(knitr::kable(summary)) #check summary table
 summary2<-summary[order(summary$weighted.mean),]
 print(paste("cluster",i,"has",length(feat2),"genes exists allelic ratio imbalance"))
 
-library(pbapply)
-othergenes<-replicate(100,sample(feat2,length(feat),replace = TRUE)) #sample 100 times
+n <- 18
+feat2.trim <- feat2[names(feat2) %in% g$sym]
+set.seed(5)
+othergenes <- replicate(100, sample(feat2.trim,n,replace=FALSE), simplify=FALSE) #sample 100 times
+pvals <- pbapply::pbsapply(1:100, function(i) {
+  other_overlap <- get_overlap(gene_prom, names(othergenes[[i]]), mef_filter, mESC_filter)
+  print(knitr::kable(other_overlap))
+  other_genes_sum <- c(sum(other_overlap$peak_count.x, na.rm=TRUE),
+                       sum(other_overlap$peak_count.y, na.rm=TRUE))
+  chisq.test(rbind(int_genes, other_genes_sum))$p.value
+})
+summary(pvals)
+
 genename<-row.names(ratio_pseudo)
 othergene_name<-pbsapply(1:100,function(i) genename[othergenes[,i]])
 test<-pbsapply(1:100,function(i) get_overlap(gene_prom, othergene_name[,i], mef_filter,mESC_filter))
@@ -132,4 +154,18 @@ obj<-pbsapply(1:100,function(i){
   return(res$p.value)
 })
 obj[order(obj)]
+```
+
+# Gene set enrichment
+
+```{r}
+genes <- numeric(nrow(ratio))
+names(genes) <- rownames(ratio)
+genes[feat] <- 1
+table(genes)
+library(goseq)
+genes <- genes[!duplicated(names(genes))]
+pwf <- nullp(genes, "mm9", "geneSymbol") # some warnings expected
+gores <- goseq(pwf, "mm9", "geneSymbol") # some warnings expected
+head(gores[gores$ontology=="BP" & gores$numInCat > 5,], 20)
 ```

@@ -12,22 +12,16 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 i=7 
-feat<-which(cluster==i) # choose genes location
-# i=1
-# feat2<-which(cluster==i)
-# feat2<-sample(feat2,size = length(feat))
-# genes <- rep(c(1,0),each=length(feat))
-genes <- rep(1,each=length(feat))
+feat<-which(cluster==i) 
+genes <- numeric(nrow(ratio))
+names(genes) <- rownames(ratio)
+genes[feat] <- 1
+table(genes)
 library(goseq)
-# names(genes) <- mapIds(org.Mm.eg.db, c(names(feat),names(feat2)),"ENSEMBL", "SYMBOL")
-names(genes) <- mapIds(org.Mm.eg.db, c(names(feat)),"ENSEMBL", "SYMBOL")
-not.na <- !is.na(names(genes))
-genes<-genes[not.na]
 genes <- genes[!duplicated(names(genes))]
-pwf <- nullp(genes, "mm9", "ensGene") # some warnings expected
-gores <- goseq(pwf, "mm9", "ensGene") # some warnings expected
-print(knitr::kable(head(gores,20)))
-table(gores$ontology)
+pwf <- nullp(genes, "mm9", "geneSymbol") # some warnings expected
+gores <- goseq(pwf, "mm9", "geneSymbol") # some warnings expected
+head(gores[gores$ontology=="BP" & gores$numInCat > 5,], 20)
 ```
 
 ```{r}

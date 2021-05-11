@@ -1,19 +1,29 @@
 ---
 title: "Larsson2019"
 author: 
-  - name: Wancen Mu, Hirak Sarkar, Avi Srivastava, Kwangbom Choi, Rob Patro, Michael I. Love
-date: "January 13, 2021"
+  - name: Wancen Mu, Hirak Sarkar, Avi Srivastava, Kwangbom Choi, 
+          Rob Patro, Michael I. Love
+date: "Feb 1, 2021"
 abstract: |
-  airpart is an R package that identifies subsets of genes displaying differential CTS allelic imbalance across all cell types.
-
-  It consists of two paragraphs.
-tags: [fusedlasso, Single cell]
+  Airpart identifies sets of genes displaying differential
+  cell-type-specific allelic imbalance across cell types
+  or states, utilizing single-cell allelic counts. It makes use of a
+  generalized fused lasso with binomial observations of allelic
+  counts to partition cell types by their allelic
+  imbalance. Alternatively, a nonparametric method for partitioning
+  cell types is offered. The package includes a number of
+  visualizations and quality control functions for examining single
+  cell allelic imbalance datasets.
 output: 
   html_document:
-    toc: true  
+    toc: true
     toc_float: true 
-    theme: united  
-    highlight: tango  
+    theme: united
+    highlight: tango
+vignette: |
+  %\VignetteIndexEntry{Practice with Larsson2019 data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup, include=FALSE, warning=FALSE}
@@ -28,8 +38,10 @@ First, we load the preprocessed [Larsson 2019](https://www.nature.com/articles/s
 ```{r}
 suppressPackageStartupMessages(library(SingleCellExperiment))
 load("../data/larsson.rda")
-assay.list<-list(a1=c57,a2=cast)
-coldata<-data.frame(x=factor(celltype$x,levels=c("mESC","G1","S","G2M")))
+cell_meta_unique <- c("mESC","G1","S","G2M")
+order_of_development <- order(match(celltype$x,cell_meta_unique))
+assay.list<-list(a1=c57[,order_of_development],a2=cast[,order_of_development])
+coldata<-data.frame(x=factor(celltype$x[order_of_development],levels=cell_meta_unique))
 sce<-SingleCellExperiment(assays=assay.list, colData=coldata)
 ```
 
@@ -64,7 +76,7 @@ sce<-sce[,keep_cell]
 
 ## QC on genes
 Note that we require genes expressed in at least **25%** cells within each cell types. 
-```{r, eval=FALSE}
+```{r}
 featureQCmetric<-featureQC(sce,spike = "Ercc",sd = 0.025)
 keep_feature<-(featureQCmetric$filter_celltype &
                  featureQCmetric$filter_sd &
@@ -72,95 +84,198 @@ keep_feature<-(featureQCmetric$filter_celltype &
 table(keep_feature)
 sce<-sce[keep_feature,]
 ```
-
-
-
-```{r}
-library(DESeq2)
-library(pbapply)
-sce2 <- SingleCellExperiment(list(counts=counts(sce)))
-check <- pbsapply(levels(sce$x), function(c) {
-  poi <- which(sce$x == c)
-  a<-rowSums(counts(sce[,poi]))
-  o <- order(a, decreasing=TRUE)
-  hist(unlist(counts(sce)[o[1:100],poi]),breaks=100)
-  dds <- DESeqDataSet(sce2[o[1:200],poi], design=~1)
-  dds <- estimateSizeFactors(dds)
-  dds <- estimateDispersions(dds)
-  plotDispEsts(dds)
-})
-```
 # Gene clustering
 
 We provide two methods for gene clustering. 
 
 ## * Gaussian Mixture modeling
 
-This is the default methods. The scatter plot is shown based on Top 2 PCs.
+Gaussian mixture modeling is the default method for gene
+clustering. The scatter plot is shown based on top 2 PCs of the
+smoothed allelic ratio data. The argument `plot=FALSE` can be used to
+avoid showing the plot. We have found gene clusters more spread out, more extreme allelic
+imbalance they have.
 ```{r}
 sce<-geneCluster(sce, G=c(20,24,28))
 metadata(sce)$geneCluster
 ```
+## Exclude chromosome X genes 
 
-## * Hierarchical clustering 
+Sex typeing allelic imbalance are excluded because we want to focus on genetically-driven AI.
+And `GMM` can actually successfully detected chr x and some imprinted genes in one gene cluster as below figure shows there are monoallelic pattern among fibroblast cells but in a coordinate way. So after removing all the genes on chromosome X, we redo the gene cluster step.
+```{r}
+makeHeatmap(sce,genecluster=26, show_row_names = TRUE)
+```
+
 ```{r,eval=FALSE}
+suppressMessages(suppressWarnings(library(GenomicFeatures)))
+suppressMessages(suppressWarnings(library("org.Mm.eg.db")))
+txdb <- makeTxDbFromGFF("ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M1/gencode.vM1.annotation.gtf.gz")
+g <- genes(txdb)
+g$sym <- mapIds(org.Mm.eg.db, sub("\\..*","",names(g)), "SYMBOL", "ENSEMBL")
+g <- g[!is.na(g$sym)]
+```
+
+```{r}
+load("../data/mm9_genome.rda")
+gene_chrx<- unname(g$sym[which(seqnames(g)=="chrX")])
+sce <- sce[-which(rownames(sce)%in%gene_chrx),]
+```
+
+```{r}
+sce<-geneCluster(sce, G=c(22,24,26))
+metadata(sce)$geneCluster
+```
+## * Hierarchical clustering 
+
+Hierarchical clustering is an alternative way for clustering. Although in this dataset, it has similar number of clusters. We have found Gaussian mixture model approach (more similar genes within cluster, based on visual inspection in PC space and of allelic ratio heatmaps)
+```{r}
 sce.hc<-geneCluster(sce,method="hierarchical")
 metadata(sce.hc)$geneCluster
 ```
-# Estimate overdispersion parameter
 
+## Generating null data and shows number of gene cluster is 1
+
+To show that above gene clusters are not false positive, we simulated null allelic ratio
+0.5 to all genes and it turns out only has one gene cluster.
 ```{r}
-jpeg(file="C:/Users/wancenmu/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/plots/BBdisp.jpeg",width = 7, height = 5,units = "in",res=450)
-estDisp(sce,genecluster = 5)
-dev.off()
-
+cts <- counts(sce)
+a1 <- matrix(emdbook::rbetabinom(dim(cts)[1]*dim(cts)[2],
+                             prob = 0.5,
+                             size = cts,
+                             theta = 20), ncol = dim(cts)[2])
+a2 <- cts - a1
+assay.list<-list(a1=a1,a2=a2)
+sce.null<-SingleCellExperiment(assays=assay.list, colData=colData(sce))
+sce.null <- preprocess(sce.null)
+sce.null<-geneCluster(sce.null, G=c(1:4))
+metadata(sce.null)$geneCluster
 ```
 # Running airpart
 
 ## Simple summary table of alleic ratio
 
-Quickly look at the weighted mean of allelic ratio for each gene cluster. Identify the interested gene cluster. Note that we recommend users only run `airpart` when the largest ordered allelic ratio difference > 0.05 for speed concerns. We find that the allelic ratio of most of the gene clusters in such cases (small absolute allelic ratio differences) won't provide enough evidence to detect differential allelic imbalance.
+Quickly look at the weighted mean of allelic ratio for each gene cluster. Identify the interested gene cluster. The following step is a complement of the QC on genes step.  We
+recommend users only run *airpart* when the largest ordered allelic
+ratio difference > 0.05 for speed concerns. We find that the allelic
+ratio of most of the gene clusters in such cases (small absolute
+allelic ratio differences) won't provide enough evidence to detect
+differential allelic imbalance.
 ```{r}
 sce<-summaryAllelicRatio(sce)
 summary<-metadata(sce)$summary
-idx<-vector()
-for(i in 1:length(summary)) {
-  inst<-summary[[i]]
-  inst_order <- inst[order(inst$weighted.mean),]
-  idx[i]<-(max(diff(inst_order$weighted.mean)) > 0.05)
-}
-metadata(sce)$summary[idx]
+sapply(1:length(summary), function(i) {
+  inst <- summary[[i]]
+  inst_order <- inst[order(inst$weighted.mean), ]
+  max(diff(inst_order$weighted.mean)) > 0.05
+})
 ```
-Here we use gene cluster 17 as an example
+Here we use gene cluster 3 and 9 as an example.
 
-## Modeling using fused lasso with quasibinomial likelihood
+## Experiment-wide beta-binomial over-dispersion
+
+We recommend examining the experiment-wide beta-binomial
+over-dispersion, which helps to inform whether to use a binomial
+likelihood or a nonparametric approach to partitioning the cell types
+by allelic imbalance.
+
+For gene cluster 3, we found that it has smaller over-dispersion and gene cluster 9 has larger over-dispersion, so we would use fussed lasso method and pairwise Mann Whitney Wilcoxon extension methods to infer partition seperately.
+```{r}
+estDisp(sce,genecluster = 3)
+estDisp(sce,genecluster = 9)
+```
+
+## Modeling using fused lasso with binomial likelihood
+
+*airpart* offers a method for partitioning cell types using the
+generalized fused lasso with binomial likelihood, as implemented in
+the *smurf* package. Cell types are merged based on their similarity
+of allelic ratios, accounting for excess variability on the ratio from
+low counts. The penalization is determined using deviance on held-out
+data, with a 1 SE cross-validation rule for favoring smaller models
+(more fused cell types).
 
 ```{r}
-f <- ratio ~ p(x, pen = "gflasso") # formula for the GFL
-t<-system.time(sce_sub <- fusedLasso(formula=f,model="binomial",sce,genecluster = 13,ncores=4,niter=1))
-knitr::kable(metadata(sce_sub)$partition,row.names = F)
+sce_sub <- fusedLasso(sce,
+  model = "binomial",
+  genecluster = 3, ncores = 4
+)
 ```
-Here `ncores` is the number of CPU used for parallelization. And it takes `r t`s with 4 CPU to test 55*367=20185 elements. Note, the computation time increases approximate linearly as number of genes increases. If you run `niter>1`, please use a `consensusPart` to derive the final partition.
+
+
+```{r, results="asis"}
+knitr::kable(metadata(sce_sub)$partition, row.names = FALSE)
+```
+Here `ncores` is the number of CPU used for parallelization. Note, the computation time increases approximate linearly as number of genes increases. If you run `niter>1`, please use a `consensusPart` to derive the final partition.
+
+Plotting a heatmap to show the cell types partition:
+
+```{r}
+makeHeatmap(sce_sub,order_by_group = FALSE)
+```
 
 ## Modeling using pairwise Mann Whitney Wilcoxon extension
 
-```{r,results='asis',warning=FALSE}
-t<-system.time(sce_sub <- wilcoxExt(sce, genecluster=25, threshold =10^seq(from=-2,to=-0.4,by=0.1)))
-knitr::kable(metadata(sce_sub)$partition,row.names = F)
+An alternative to the fused lasso with binomial likelihood is an
+extension we have implemented wherein all pairs cell types are
+compared with Mann Whitney Wilcoxon rank sum tests. In practice, we
+find that when the allelic counts deviates strongly from a binomial
+(e.g. large over-dispersion), the `wilcoxExt` function can offer
+improved performance, in terms of recovery of the true partition of
+cell types by allelic imbalance. The partition is decided based on a
+loss function motivated by the Bayesian Information Criteria 
+
+```{r results="asis"}
+thrs <- 10^seq(from = -1.6, to = -0.8, by = 0.1)
+sce_sub <- wilcoxExt(sce, genecluster = 9, threshold = thrs)
+knitr::kable(metadata(sce_sub)$partition, row.names = FALSE)
+metadata(sce_sub)$threshold
 ```
 
-It takes `r t2`s to run Wilcoxon.
+## Calculating allelic ratio estimate via beta-binomial
 
-## Calculating allelic Ratio estimator by betabinomial 
-### Confidence interval with normal approximation
-```{r,warning=FALSE, results="asis"}
-sce_sub<-allelicRatio(sce_sub)
-knitr::kable(metadata(sce_sub)$estimator,row.names = F)
-```
+After *airpart* determines a partition of cell types either by the fused
+lasso with binomial likelihood or the nonparametric approach described
+above, it give fused lasso estimate or weighted mean as prior Cauchy mean to estimate the allelic ratio per gene and per cell type (and credible intervals) via beta-binomial loglikelihood, using functionality from the *apeglm* package.
+
+Note that the estimates and confidence intervals are not equal for
+cell types in the same partition and for genes, because in this step we re-estimate
+the conditional cell type means per original cell type and accounting for each gene overdispersion. The dispersion parameter is using Efron-like formula shrinkage.
+
+A violin plot with posterior mean allelic ratios on the y-axis:
+We can see that G2M and S has less cells in cell types, so both violin plot and forestplot  shows a longer ranges or credible interval in these two cell types.
+
 ```{r}
-makeForest(sce_sub)
-makeBoxplot(sce_sub)
-makeRatioHeatmap(sce_sub)
+sce_sub <- allelicRatio(sce_sub)
+makeViolin(sce_sub)
+```
+
+```{r, warning=FALSE, fig.width=12}
+sce_sub <- allelicRatio(sce_sub)
+makeForest(sce_sub,showtext = TRUE)
+```
+
+Finally, a heatmap as before, but now with the cell types grouped
+according to the partition:
+
+```{r}
+makeHeatmap(sce_sub, order_by_group = FALSE, show_row_names = TRUE)
+```
+
+## GO term analysis
+
+Through GO term evaluation, we can find indeed `regulation of myeloid cell differentiation` and differential `gene expression` GO terms has significant p value.
+```{r, results="asis"}
+library(goseq)
+i=9
+feat<-which(rowData(sce)$cluster==i)
+genes <- rep(0,nrow(sce))
+names(genes) <- rownames(sce)
+genes[feat] <- 1
+table(genes)
+suppressMessages(pwf <- nullp(genes, "mm9", "geneSymbol"))
+suppressMessages(gores <- goseq(pwf, "mm9", "geneSymbol")) 
+knitr::kable(head(gores[gores$ontology=="BP" & gores$numInCat>10,], 15))
 ```
 
 # Session Info

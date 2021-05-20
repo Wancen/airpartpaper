@@ -65,7 +65,7 @@ sce<-sce[,keep_cell]
 
 ## QC on genes
 Note that we require genes expressed in at least **25%** cells within each cell types. 
-```{r, eval=FALSE}
+```{r}
 featureQCmetric<-featureQC(sce,spike = "Ercc",sd = 0.03)
 keep_feature<-(featureQCmetric$filter_celltype &
                  featureQCmetric$filter_sd &
@@ -76,30 +76,41 @@ sce<-sce[keep_feature,]
 
 
 
-```{r}
-library(DESeq2)
-library(pbapply)
-sce2 <- SingleCellExperiment(list(counts=counts(sce)))
-check <- pbsapply(levels(sce$x), function(c) {
-  poi <- which(sce$x == c)
-  a<-rowSums(counts(sce[,poi]))
-  o <- order(a, decreasing=TRUE)
-  hist(unlist(counts(sce)[o[1:100],poi]),breaks=100)
-  dds <- DESeqDataSet(sce[o[1:200],poi], design=~1)
-  dds <- estimateSizeFactors(dds)
-  dds <- estimateDispersions(dds)
-  plotDispEsts(dds)
-})
+```{r eval=FALSE, echo=FALSE}
+# library(DESeq2)
+# library(pbapply)
+# sce2 <- SingleCellExperiment(list(counts=counts(sce)))
+# check <- pbsapply(levels(sce$x), function(c) {
+#   poi <- which(sce$x == c)
+#   a<-rowSums(counts(sce[,poi]))
+#   o <- order(a, decreasing=TRUE)
+#   hist(unlist(counts(sce)[o[1:100],poi]),breaks=100)
+#   dds <- DESeqDataSet(sce2[o[1:200],poi], design=~1)
+#   dds <- estimateSizeFactors(dds)
+#   dds <- estimateDispersions(dds)
+#   plotDispEsts(dds)
+# })
 ```
 # Gene clustering
 
 We provide two methods for gene clustering. 
 
+
+## Exclude chromosome X genes 
+
+Sex typeing allelic imbalance are excluded because we want to focus on genetically-driven AI.
+And `GMM` can actually successfully detected chr x and some imprinted genes in one gene cluster as below figure shows there are monoallelic pattern among fibroblast cells but in a coordinate way. So after removing all the genes on chromosome X, we redo the gene cluster step.
+
+```{r}
+load("../data/mm9_genome.rda")
+gene_chrx<- unname(g$sym[which(seqnames(g)=="chrX")])
+sce <- sce[-which(rownames(sce)%in%gene_chrx),]
+```
+
 ## * Gaussian Mixture modeling
 
-This is the default methods. The scatter plot is shown based on Top 2 PCs.
 ```{r}
-sce<-geneCluster(sce, G=c(16,20,24,28))
+sce<-geneCluster(sce, G=c(12,14,16))
 metadata(sce)$geneCluster
 ```
 
@@ -108,39 +119,58 @@ metadata(sce)$geneCluster
 sce.hc<-geneCluster(sce,method="hierarchical")
 metadata(sce.hc)$geneCluster
 ```
-# Estimate overdispersion parameter
-
-```{r}
-jpeg(file="C:/Users/wancenmu/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/plots/BBdisp_deng.jpeg",width = 7, height = 5,units = "in",res=450)
-estDisp(sce,genecluster = 7)
-dev.off()
-```
-# Running airpart
 
 ## Simple summary table of alleic ratio
 
 Quickly look at the weighted mean of allelic ratio for each gene cluster. Identify the interested gene cluster. Note that we recommend users only run `airpart` when the largest ordered allelic ratio difference > 0.05 for speed concerns. We find that the allelic ratio of most of the gene clusters in such cases (small absolute allelic ratio differences) won't provide enough evidence to detect differential allelic imbalance.
+Here we find out all clusters exists differential alleic imbalance. 
 ```{r}
 sce<-summaryAllelicRatio(sce)
 summary<-metadata(sce)$summary
-idx<-vector()
-for(i in 1:length(summary)) {
-  inst<-summary[[i]]
-  inst_order <- inst[order(inst$weighted.mean),]
-  idx[i]<-(max(diff(inst_order$weighted.mean)) > 0.05)
-}
-metadata(sce)$summary[idx]
+sapply(1:length(summary), function(i) {
+  inst <- summary[[i]]
+  inst_order <- inst[order(inst$weighted.mean), ]
+  max(diff(inst_order$weighted.mean)) > 0.05
+})
 ```
 Here we use gene cluster 10 as an example. Since it has 58 genes, we will use wilcoxon for faster computation.
 
-## Modeling using fused lasso with quasibinomial likelihood
+# Estimate overdispersion parameter
 
 ```{r}
-f <- ratio ~ p(x, pen = "gflasso") # formula for the GFL
-t<-system.time(sce_sub <- fusedLasso(formula=f,model="binomial",sce,genecluster = 13,ncores=4,niter=1))
-knitr::kable(metadata(sce_sub)$partition,row.names = F)
+jpeg(file="C:/Users/wancenmu/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/plots/BBdisp_deng.jpeg",width = 7, height = 5,units = "in",res=450)
+estDisp(sce,genecluster = 11)
+estDisp(sce,genecluster = 13)
+dev.off()
 ```
-Here `ncores` is the number of CPU used for parallelization. And it takes `r t`s with 4 CPU to test 55*367=20185 elements. Note, the computation time increases approximate linearly as number of genes increases. If you run `niter>1`, please use a `consensusPart` to derive the final partition.
+## Experiment-wide beta-binomial over-dispersion
+
+We recommend examining the experiment-wide beta-binomial
+over-dispersion, which helps to inform whether to use a binomial
+likelihood or a nonparametric approach to partitioning the cell types
+by allelic imbalance.
+
+For gene cluster 13, we found that it has smaller over-dispersion and gene cluster 11 has larger over-dispersion, so we would use fussed lasso method and pairwise Mann Whitney Wilcoxon extension methods to infer partition seperately.
+# Running airpart
+
+```{r}
+sce_sub <- fusedLasso(sce,
+  model = "binomial",
+  genecluster = 13, ncores = 4
+)
+```
+
+
+```{r, results="asis"}
+knitr::kable(metadata(sce_sub)$partition, row.names = FALSE)
+```
+Here `ncores` is the number of CPU used for parallelization. Note, the computation time increases approximate linearly as number of genes increases. If you run `niter>1`, please use a `consensusPart` to derive the final partition.
+
+Plotting a heatmap to show the cell types partition:
+
+```{r}
+makeHeatmap(sce_sub,order_by_group = FALSE)
+```
 
 ## Modeling using pairwise Mann Whitney Wilcoxon extension
 
@@ -162,6 +192,42 @@ knitr::kable(metadata(sce_sub)$estimator,row.names = F)
 makeForest(sce_sub)
 makeBoxplot(sce_sub)
 makeRatioHeatmap(sce_sub)
+```
+
+## GO term analysis
+
+Through GO term evaluation, we can find indeed `regulation of myeloid cell differentiation` and differential `gene expression` GO terms has significant p value.
+```{r, results="asis"}
+library(goseq)
+i=11
+feat<-which(rowData(sce)$cluster==i)
+genes <- rep(0,nrow(sce))
+names(genes) <- rownames(sce)
+genes[feat] <- 1
+table(genes)
+suppressMessages(pwf <- nullp(genes, "mm9", "geneSymbol"))
+suppressMessages(gores <- goseq(pwf, "mm9", "geneSymbol")) 
+p_adjust <- p.adjust(gores$over_represented_pvalue,method = "fdr")
+gores$`p.adjust`<-p_adjust
+knitr::kable(head(gores[gores$ontology=="BP" & gores$numInCat>10,], 15))
+```
+
+## GO term analysis
+
+Through GO term evaluation, we can find indeed `regulation of myeloid cell differentiation` and differential `gene expression` GO terms has significant p value.
+```{r, results="asis"}
+library(goseq)
+i=13
+feat<-which(rowData(sce)$cluster==i)
+genes <- rep(0,nrow(sce))
+names(genes) <- rownames(sce)
+genes[feat] <- 1
+table(genes)
+suppressMessages(pwf <- nullp(genes, "mm9", "geneSymbol"))
+suppressMessages(gores <- goseq(pwf, "mm9", "geneSymbol")) 
+p_adjust <- p.adjust(gores$over_represented_pvalue,method = "fdr")
+gores$`p.adjust`<-p_adjust
+knitr::kable(head(gores[gores$ontology=="BP" & gores$numInCat>10,], 15))
 ```
 
 # Session Info

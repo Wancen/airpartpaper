@@ -28,9 +28,10 @@ First, we load the preprocessed [Deng 2014](https://www.nature.com/articles/s415
 ```{r}
 suppressPackageStartupMessages(library(SingleCellExperiment))
 load("../data/Deng.rda")
-assay.list<-list(a1=b6,a2=cast)
 cell_meta_unique <- c("zy","early2cell","mid2cell","late2cell","4cell","8cell","16cell","earlyblast","midblast","lateblast") 
-coldata<-data.frame(x=factor(celltype,levels=cell_meta_unique))
+order_of_development <- order(match(celltype,cell_meta_unique))
+assay.list<-list(a1=b6[,order_of_development],a2=cast[,order_of_development])
+coldata<-data.frame(x=factor(celltype[order_of_development],levels=cell_meta_unique))
 sce<-SingleCellExperiment(assays=assay.list, colData=coldata)
 ```
 
@@ -110,7 +111,7 @@ sce <- sce[-which(rownames(sce)%in%gene_chrx),]
 ## * Gaussian Mixture modeling
 
 ```{r}
-sce<-geneCluster(sce, G=c(12,14,16))
+sce<-geneCluster(sce, G=c(8))
 metadata(sce)$geneCluster
 ```
 
@@ -156,7 +157,7 @@ For gene cluster 13, we found that it has smaller over-dispersion and gene clust
 ```{r}
 sce_sub <- fusedLasso(sce,
   model = "binomial",
-  genecluster = 13, ncores = 4
+  genecluster = 8, ncores = 4
 )
 ```
 
@@ -172,6 +173,11 @@ Plotting a heatmap to show the cell types partition:
 makeHeatmap(sce_sub,order_by_group = FALSE)
 ```
 
+
+```{r}
+sce_sub <- allelicRatio(sce_sub)
+makeViolin(sce_sub)
+```
 ## Modeling using pairwise Mann Whitney Wilcoxon extension
 
 ```{r,results='asis',warning=FALSE}
@@ -180,19 +186,6 @@ knitr::kable(metadata(sce_sub)$partition,row.names = F)
 ```
 
 It takes `r t2`s to run Wilcoxon.
-
-## Calculating allelic Ratio estimator by betabinomial 
-### Confidence interval with normal approximation
-```{r,warning=FALSE, results="asis"}
-sce_sub<-allelicRatio(sce_sub)
-knitr::kable(metadata(sce_sub)$estimator,row.names = F)
-```
-
-```{r}
-makeForest(sce_sub)
-makeBoxplot(sce_sub)
-makeRatioHeatmap(sce_sub)
-```
 
 ## GO term analysis
 
@@ -212,23 +205,6 @@ gores$`p.adjust`<-p_adjust
 knitr::kable(head(gores[gores$ontology=="BP" & gores$numInCat>10,], 15))
 ```
 
-## GO term analysis
-
-Through GO term evaluation, we can find indeed `regulation of myeloid cell differentiation` and differential `gene expression` GO terms has significant p value.
-```{r, results="asis"}
-library(goseq)
-i=13
-feat<-which(rowData(sce)$cluster==i)
-genes <- rep(0,nrow(sce))
-names(genes) <- rownames(sce)
-genes[feat] <- 1
-table(genes)
-suppressMessages(pwf <- nullp(genes, "mm9", "geneSymbol"))
-suppressMessages(gores <- goseq(pwf, "mm9", "geneSymbol")) 
-p_adjust <- p.adjust(gores$over_represented_pvalue,method = "fdr")
-gores$`p.adjust`<-p_adjust
-knitr::kable(head(gores[gores$ontology=="BP" & gores$numInCat>10,], 15))
-```
 
 # Session Info
 ```{r}

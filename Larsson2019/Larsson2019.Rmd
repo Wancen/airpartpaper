@@ -1,0 +1,462 @@
+---
+title: "Larsson2019"
+author: 
+  - name: Wancen Mu, Hirak Sarkar, Avi Srivastava, Kwangbom Choi, 
+          Rob Patro, Michael I. Love
+date: "Feb 1, 2021"
+abstract: |
+  Airpart identifies sets of genes displaying differential
+  cell-type-specific allelic imbalance across cell types
+  or states, utilizing single-cell allelic counts. It makes use of a
+  generalized fused lasso with binomial observations of allelic
+  counts to partition cell types by their allelic
+  imbalance. Alternatively, a nonparametric method for partitioning
+  cell types is offered. The package includes a number of
+  visualizations and quality control functions for examining single
+  cell allelic imbalance datasets.
+output: 
+  html_document:
+    toc: true
+    toc_float: true 
+    theme: united
+    highlight: tango
+vignette: |
+  %\VignetteIndexEntry{Practice with Larsson2019 data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+## Load required libraries
+suppressMessages(suppressWarnings(library(data.table)))
+suppressMessages(suppressWarnings(library(plyranges)))
+suppressMessages(suppressWarnings(library(tidyverse)))
+library(airpart)
+```
+
+# Load data
+
+First, we load the preprocessed [Larsson 2019](https://www.nature.com/articles/s41586-018-0836-1) data. It includes one allelic counts(`c57`) and the other allelic counts(`cast`) which was derived after removing some low quality cells indicated in the paper. `celltype` is a character vector of all cell types.
+
+```{r}
+suppressPackageStartupMessages(library(SingleCellExperiment))
+load("../data/larsson.rda")
+cell_meta_unique <- c("mESC","G1","S","G2M")
+order_of_development <- order(match(celltype$x,cell_meta_unique))
+assay.list<-list(a1=c57[,order_of_development],a2=cast[,order_of_development])
+coldata<-data.frame(x=factor(celltype$x[order_of_development],levels=cell_meta_unique))
+sce<-SingleCellExperiment(assays=assay.list, colData=coldata)
+```
+
+# Create Ratio matrix
+
+Here we add the pseudo count for gene clustering and visualization.
+```{r}
+sce <- preprocess(sce)
+```
+
+Take a look at highest expressed genes
+```{r}
+counts(sce)[order(rowSums(counts(sce)),decreasing = T)[1:10],sample(dim(sce)[2],5)]
+```
+# Quality control step
+### QC on cells
+```{r}
+cellQCmetrics<-cellQC(sce,mad_detected=3,mad_spikegenes = 4,spike = "Ercc")
+cellQCmetrics
+```
+
+Now define cell filtering automatically or users can manually filter out based on `sum`,`detected` and `spikePercent`. 
+```{r}
+keep_cell <- (
+  cellQCmetrics$filter_sum & # sufficient features (genes)
+  cellQCmetrics$filter_detected & # sufficient molecules counted
+  cellQCmetrics$filter_spike  # sufficient features expressed compared to spike genes, high quality cells
+) 
+table(keep_cell)
+sce<-sce[,keep_cell]
+```
+
+### QC on genes
+Note that we require genes expressed in at least **25%** cells within each cell types. 
+```{r}
+featureQCmetric<-featureQC(sce,spike = "Ercc",sd = 0.025)
+keep_feature<-(featureQCmetric$filter_celltype &
+                 featureQCmetric$filter_sd &
+                 featureQCmetric$filter_spike)
+table(keep_feature)
+sce<-sce[keep_feature,]
+```
+# Gene clustering
+
+We provide two methods for gene clustering. 
+
+### 1. Gaussian Mixture modeling
+
+Gaussian mixture modeling is the default method for gene
+clustering. The scatter plot is shown based on top 2 PCs of the
+smoothed allelic ratio data. The argument `plot=FALSE` can be used to
+avoid showing the plot. We have found gene clusters more spread out, more extreme allelic
+imbalance they have.
+```{r}
+sce<-geneCluster(sce, G=c(20,24,28))
+metadata(sce)$geneCluster
+```
+#### Exclude chromosome X genes 
+
+Sex typeing allelic imbalance are excluded because we want to focus on genetically-driven AI.
+And `GMM` can actually successfully detected chr x and some imprinted genes in one gene cluster as below figure shows there are monoallelic pattern among fibroblast cells but in a coordinate way. So after removing all the genes on chromosome X, we redo the gene cluster step.
+```{r}
+makeHeatmap(sce,genecluster=26, show_row_names = TRUE)
+```
+
+```{r,eval=FALSE}
+suppressMessages(suppressWarnings(library(GenomicFeatures)))
+suppressMessages(suppressWarnings(library("org.Mm.eg.db")))
+txdb <- makeTxDbFromGFF("ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M1/gencode.vM1.annotation.gtf.gz")
+g <- genes(txdb)
+g$sym <- mapIds(org.Mm.eg.db, sub("\\..*","",names(g)), "SYMBOL", "ENSEMBL")
+g <- g[!is.na(g$sym)]
+```
+
+```{r}
+load("../data/mm9_genome.rda")
+gene_chrx<- unname(g$sym[which(seqnames(g)=="chrX")])
+sce <- sce[-which(rownames(sce)%in%gene_chrx),]
+```
+
+```{r}
+sce<-geneCluster(sce, G=5)
+metadata(sce)$geneCluster
+```
+### 2. Hierarchical clustering 
+
+Hierarchical clustering is an alternative way for clustering. Although in this dataset, it has similar number of clusters. We have found Gaussian mixture model approach (more similar genes within cluster, based on visual inspection in PC space and of allelic ratio heatmaps)
+```{r}
+sce.hc<-geneCluster(sce,method="hierarchical")
+metadata(sce.hc)$geneCluster
+```
+
+#### Generating null data and shows number of gene cluster is 1
+
+To show that above gene clusters are not false positive, we simulated null allelic ratio
+0.5 to all genes and it turns out only has one gene cluster.
+```{r}
+cts <- counts(sce)
+a1 <- matrix(emdbook::rbetabinom(dim(cts)[1]*dim(cts)[2],
+                             prob = 0.5,
+                             size = cts,
+                             theta = 20), ncol = dim(cts)[2])
+a2 <- cts - a1
+assay.list<-list(a1=a1,a2=a2)
+sce.null<-SingleCellExperiment(assays=assay.list, colData=colData(sce))
+sce.null <- preprocess(sce.null)
+# jpeg(file="C:/Users/UNC Support/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/cluster_null.jpeg",width = 8, height = 7,units = "in",res=450)
+sce.null<-geneCluster(sce.null, G=c(1:4))
+# dev.off()
+metadata(sce.null)$geneCluster
+```
+# Running airpart
+
+### Simple summary table of alleic ratio
+
+Quickly look at the weighted mean of allelic ratio for each gene cluster. Identify the interested gene cluster. The following step is a complement of the QC on genes step.  We
+recommend users only run *airpart* when the largest ordered allelic
+ratio difference > 0.05 for speed concerns. We find that the allelic
+ratio of most of the gene clusters in such cases (small absolute
+allelic ratio differences) won't provide enough evidence to detect
+differential allelic imbalance.
+```{r}
+summary<-summaryAllelicRatio(sce)
+sapply(1:length(summary), function(i) {
+  inst <- summary[[i]]
+  inst_order <- inst[order(inst$weighted.mean), ]
+  max(diff(inst_order$weighted.mean)) > 0.05
+})
+```
+Here we use gene cluster 3 as an example.
+
+### Experiment-wide beta-binomial over-dispersion
+
+We recommend examining the experiment-wide beta-binomial
+over-dispersion, which helps to inform whether to use a binomial
+likelihood or a nonparametric approach to partitioning the cell types
+by allelic imbalance.
+
+For gene cluster 3, we use fussed lasso method to infer partition.
+```{r}
+estDisp(sce,genecluster = 3)
+```
+
+### Modeling using fused lasso with binomial likelihood
+
+*airpart* offers a method for partitioning cell types using the
+generalized fused lasso with binomial likelihood, as implemented in
+the *smurf* package. Cell types are merged based on their similarity
+of allelic ratios, accounting for excess variability on the ratio from
+low counts. The penalization is determined using deviance on held-out
+data, with a 1 SE cross-validation rule for favoring smaller models
+(more fused cell types).
+
+```{r}
+sce_sub <- fusedLasso(sce,
+  model = "binomial",
+  genecluster = 3, ncores = 4
+)
+```
+
+Use table and heatmap to visualize the result.
+```{r, results="asis"}
+# knitr::kable(metadata(sce_sub)$partition, row.names = FALSE)
+# jpeg(file="C:/Users/UNC Support/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/heatmap_larsson.jpeg",width = 8, height = 7,units = "in",res=450)
+makeHeatmap(sce_sub, order_by_group = FALSE,show_row_names = F)
+# dev.off()
+```
+Here `ncores` is the number of CPU used for parallelization. Note, the computation time increases approximate linearly as number of genes increases. If you run `niter>1`, please use a `consensusPart` to derive the final partition.
+
+
+### Calculating allelic ratio estimate via beta-binomial
+
+After *airpart* determines a partition of cell types either by the fused
+lasso with binomial likelihood or the nonparametric approach described
+above, it give fused lasso estimate or weighted mean as prior Cauchy mean to estimate the allelic ratio per gene and per cell type (and credible intervals) via beta-binomial loglikelihood, using functionality from the *apeglm* package.
+
+Note that the estimates and credible intervals are not equal for genes, because in this step we re-estimate
+the conditional cell type means per partition group and accounting for each gene overdispersion. The dispersion parameter is using Efron-like formula shrinkage.
+
+
+```{r}
+sce_sub <- allelicRatio(sce_sub)
+svalue <- extractResult(sce_sub,estimates = "svalue")
+lower <- extractResult(sce_sub,"lower")
+upper <- extractResult(sce_sub,"upper")
+indexci<- which(lower[,2]<0.5 & upper[,2]>0.5)
+indexs<- which(as.numeric(svalue[,2])>0.05)
+```
+A violin plot with posterior mean allelic ratios on the y-axis:
+note that we preprocess the allelic ration according to strain, so the maternal allelic ratio for fibroblast is 1-estimates
+
+```{r, echo=FALSE, message=FALSE}
+suppressMessages(suppressWarnings(library(forestplot)))
+suppressMessages(suppressWarnings(library(RColorBrewer)))
+makeViolin <- function(sce, xlab = "cell type") {
+  ar <- rowData(sce)[, c(grep("ar", colnames(rowData(sce)), value = TRUE))] %>%
+    `colnames<-`(levels(sce$x))
+  ar[,2:4]<-1-ar[,2:4] %>% as.matrix()
+  dat <- data.frame(
+    ratio = as.vector(unlist(ar)),
+    x = factor(rep(levels(sce$x), each = length(sce))),
+    part = factor(rep(metadata(sce)$partition$part, each = length(sce)))
+  )
+  sample_size <- data.frame(table(sce$x)) %>% `colnames<-`(c("x", "n"))
+  dat <- dat %>%
+    left_join(sample_size)
+  dat$myaxis <- paste0(dat$x, "\n", "n=", dat$n) %>% as.factor()
+  dat$myaxis <- factor(dat$myaxis, levels = unique(paste0(dat$x, "\n", "n=", dat$n)))
+  p <- ggplot(dat, aes(x = .data$myaxis, y = .data$ratio, fill = .data$part)) +
+    geom_violin(color = "#A4A4A4", size = 1.2, alpha = .7) +
+    geom_boxplot(width = 0.1, color = "black") +
+    theme_minimal() +ylim(0,1)+
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = "transparent")
+    ) +
+    scale_fill_brewer(palette = "Set2") +
+    labs(x = xlab, y = "maternal allelic ratio")
+  p
+}
+makeForest <- function(sce, genepoi, ctpoi = seq_len(nlevels(sce$x)), showtext = FALSE, xticks, boxsize = .25,
+                       xlab = "Allelic Ratio", col,
+                       grid = structure(seq(0.1, 0.9, 0.1),
+                         gp = gpar(lty = 2, col = "#CCCCFF")
+                       ), ...) {
+    qual_col_pals <- brewer.pal.info[brewer.pal.info$category == "qual", ]
+    col_vector <- unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+  if (missing(xticks)) {
+    xticks <- seq(from = 0, to = 1, by = 0.1)
+    xtlab <- rep(c(TRUE, FALSE, TRUE, FALSE, FALSE), length.out = length(xticks))
+    attr(xticks, "labels") <- xtlab
+  }
+  if (missing(col)) {
+    col <- fpColors(box = col_vector[seq_len(length(ctpoi))])
+  }
+  ar <- rowData(sce)[, c(grep("svalue", colnames(rowData(sce)), value = TRUE))] %>% `colnames<-`(levels(sce$x))
+  if (showtext) {
+    forest_text <- data.frame(`Gene` = rownames(sce), ar[, ctpoi])
+  } else {
+    forest_text <- data.frame(Gene = rownames(sce)) %>% `rownames<-`(rownames(ar))
+  }
+  if (missing(genepoi)) {
+    smin <- apply(apply(ar, 2, as.numeric), 1, min)
+    genepoi <- head(order(smin), min(40, nrow(sce)))
+  }
+  forest_text <- rbind(colnames(forest_text), forest_text[genepoi, ] %>% as.data.frame())
+  message("svalue shown in columns per cell type")
+  mean = rbind(rep(NA, length(ctpoi)), rowData(sce)[genepoi, c(grep("ar", colnames(rowData(sce)), value = TRUE))[ctpoi]] %>% as.matrix())
+  mean[,2:4] = 1 - mean[,2:4]
+  forestplot::forestplot(forest_text,
+    is.summary = c(TRUE, rep(FALSE, nrow(forest_text) - 1)),
+    hrzl_lines = list("2" = gpar(lty = 2)),
+    line.margin = .1, # We need to add this to avoid crowding
+    legend = levels(sce$x)[ctpoi], grid = grid,
+    txt_gp = fpTxtGp(
+      label = list(gpar(cex = 0.8), gpar(cex = 0.8, col = "#703C3C")),
+      ticks = gpar(cex = 0.9), xlab = gpar(cex = 0.9)
+    ),
+    boxsize = boxsize, graphwidth = unit(15, "cm"),
+    mean = mean,
+    lower = rbind(rep(NA, length(ctpoi)), rowData(sce)[genepoi, c(grep("lower", colnames(rowData(sce)), value = TRUE))[ctpoi]] %>% as.matrix()),
+    upper = rbind(rep(NA, length(ctpoi)), rowData(sce)[genepoi, c(grep("upper", colnames(rowData(sce)), value = TRUE))[ctpoi]] %>% as.matrix()),
+    clip = c(0.01, 1), xticks = xticks, ref = 0.5,
+    col = col, xlab = xlab
+  )
+}
+```
+
+```{r}
+makeViolin(sce_sub)
+```
+
+```{r, warning=FALSE, fig.width=12}
+# jpeg(file="C:/Users/wancenmu/OneDrive - University of North Carolina at Chapel Hill/Lab/Github/airpartpaper/plot/forest.jpeg",width = 8, height = 6,units = "in",res=450)
+makeForest(sce_sub,showtext = FALSE)
+# dev.off()
+```
+
+# GO term analysis
+
+Through GO term evaluation, we can find indeed `response to leukemia inhibitory factor` GO terms(GO:1990823) has the most significant p value = 0.0000283.
+```{r, results="asis"}
+suppressMessages(suppressWarnings(library(goseq)))
+i=3
+feat<-which(rowData(sce)$cluster==i)
+genes <- rep(0,nrow(sce))
+names(genes) <- rownames(sce)
+genes[feat] <- 1
+table(genes)
+suppressMessages(pwf <- nullp(genes, "mm9", "geneSymbol"))
+suppressMessages(gores <- goseq(pwf, "mm9", "geneSymbol")) 
+p_adjust <- p.adjust(gores$over_represented_pvalue,method = "fdr")
+gores$`p.adjust`<-p_adjust
+knitr::kable(head(gores[gores$ontology=="BP" & gores$numInCat>15,], 15))
+```
+
+# Enrichment analysis
+To access whether this gene cluster has significant differential allelic imbalance pattern other than null cluster and is correlated with enhancer activity, enrichment analysis was performed between C57 allele h3k27ac peaks and the DAI gene cluster. 
+
+### load non-allelic chip-seq data 
+```{r}
+mESC<-read_narrowpeaks("../data/mESC.narrowPeak",genome_info = "mm9")
+colnames(mcols(mESC))<-c("name","score","fold_enrichment","-log(pvalue)","-log(FDR)/log(10)","summit")
+mESC_filter<-mESC[which(mcols(mESC)$fold_enrichment>15)]
+
+mef<-read_narrowpeaks("../data/mef.narrowPeak",genome_info = "mm9")
+colnames(mcols(mef))<-c("name","score","fold_enrichment","-log(pvalue)","-log(FDR)/log(10)","summit")
+mef_filter<-mef[which(mcols(mef)$fold_enrichment>15)]
+
+## Map IDs
+suppressMessages(suppressWarnings(library(GenomicFeatures)))
+suppressMessages(suppressWarnings(library("org.Mm.eg.db")))
+txdb <- makeTxDbFromGFF("ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M1/gencode.vM1.annotation.gtf.gz")
+g <- genes(txdb)
+g$sym <- mapIds(org.Mm.eg.db, sub("\\..*","",names(g)), "SYMBOL", "ENSEMBL")
+g <- g[!is.na(g$sym)]
+
+## Define gene promoters
+prom <- promoters(g, upstream = 2000, downstream = 200)
+```
+
+### Define helper function
+```{r}
+## Get allelic imbalance genes
+get_overlap<-function(prom,feat,mESC,mef){
+  poi<-which(mcols(prom)$sym %in% feat)
+  g2<-prom[poi]
+  
+  mESC_ov<-join_overlap_inner(g2, mESC)
+  mef_ov<-join_overlap_inner(g2, mef)
+  
+ 
+  mESC_ov2 <- mESC_ov %>%
+    group_by(sym) %>%
+    summarize(
+      fold_enrichment=max(fold_enrichment),
+      peak_count=sum(!is.na(fold_enrichment)))
+  
+  mef_ov2 <- mef_ov %>%
+    group_by(sym) %>%
+    summarize(
+      fold_enrichment=max(fold_enrichment),
+      peak_count=sum(!is.na(fold_enrichment)))
+  
+  enrich<-merge(mESC_ov2,mef_ov2,by="sym",all=T)
+  return(enrich)
+}
+```
+
+### Define Gene set of interest and null sets
+```{r}
+i=3
+feat<-rownames(sce)[which(rowData(sce)$cluster==i)]
+
+## null set
+j=1
+feat_other<-rownames(sce)[which(rowData(sce)$cluster==j)]
+
+```
+
+Fisher-exact test and permutation test were both used to test the assumption that stem cell enrichment versus fibroblast enrichment is  correlated  with  gene  cluster. 
+
+### Fisher-exact test for countoverlap
+```{r}
+# Calculate overlap counts
+overlaptxb_prom<-get_overlap(prom,feat,mESC_filter,mef_filter)
+overlaptxb_prom_total<- c(sum(overlaptxb_prom$peak_count.x,na.rm = T),sum(overlaptxb_prom$peak_count.y,na.rm = T))
+overlaptxb_other_prom<-get_overlap(prom,feat_other,mESC_filter,mef_filter)
+
+overlaptxb_otherprom_total<- c(sum(overlaptxb_other_prom$peak_count.x,na.rm = T),sum(overlaptxb_other_prom$peak_count.y,na.rm = T))
+## calculate pvalue
+res<-fisher.test(matrix(c(overlaptxb_prom_total,overlaptxb_otherprom_total),ncol=2,byrow = T),alternative = "g")
+res$p.value
+
+```
+
+### permutation test
+Random  sampled  the  same  number  of genes in the interested gene cluster from the null cluster and the interested gene cluster and calculate odds ratio of stem cell verses fibroblast among the  sampled  genes  and  the  left  genes.  Repetitive  500  times.  Sampling distribution of the odds ratio was roughly following Gaussian distribution. And the odds ratio calculated from original data is far away from the sampling distribution, indicating that this gene cluster are significantly differ with null (p <10−4) and it is consistent with Fisher-exact test results.
+```{r, eval=T}
+library(pbapply)
+or<-pbsapply(1:500,function(i){
+  feat1 <- sample(c(feat,feat_other),length(feat))
+  overlaptxb_prom<-get_overlap(prom,feat1,mESC_filter,mef_filter)
+  overlaptxb_prom_total<- c(sum(overlaptxb_prom$peak_count.x,na.rm = T),sum(overlaptxb_prom$peak_count.y,na.rm = T))
+  feat_other1 <- setdiff(c(feat,feat_other),feat1)
+  overlaptxb_other_prom<-get_overlap(prom,feat_other1,mESC_filter,mef_filter)
+  overlaptxb_otherprom_total<- c(sum(overlaptxb_other_prom$peak_count.x,na.rm = T),sum(overlaptxb_other_prom$peak_count.y,na.rm = T))
+  res<-fisher.test(matrix(c(overlaptxb_prom_total,overlaptxb_otherprom_total),ncol=2,byrow =T),alternative = "g")
+  return(res$estimate)
+})
+or <- data.frame(or = or)
+p<-ggplot(or, aes(x=or)) + 
+  geom_histogram(color="black", fill="lightblue",binwidth=0.05) + 
+  # geom_density(alpha=.2, fill="#E69F00") +
+  geom_vline(aes(xintercept=1),
+            color="lightblue", linetype="dashed",size=1) +
+  theme_minimal() +
+  theme(panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = 'transparent')) +
+  labs(x = "Odds ratio",y="Frequency")+
+  geom_point(
+    data=data.frame(x=2.165635,y=0),
+    aes(x,y),
+    color="red",
+    size=4)
+p
+```
+
+# Session Info
+```{r}
+sessionInfo()
+```
+

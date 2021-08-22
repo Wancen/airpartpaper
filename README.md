@@ -7,6 +7,6 @@ Code for analyses in [*airpart*](https://github.com/Wancen/airpart) paper
 
 * [spatialDmelxsim](https://github.com/Wancen/airpartpaper/blob/main/spatialDmelxsim/spatialDmelxsim.R): [Combsand Fraser (2018)](https://doi.org/10.1371/journal.pgen.1007631) performed RNA-seq of five hybrid Drosophila species D.melanogaster×D.simulans  embryos  sliced  along  their  anterior-posterior axis to identify genes with spatially varying allelic imbalance.
 
-* [DynamicASE](https://github.com/Wancen/airpartpaper/blob/main/DynamicASE/README.md): [Gutierrez-Arceluset al.(2020)](https://www.nature.com/articles/s41588-020-0579-4) stimulated memory CD4+ T cells from 24 genotyped individuals of European ancestry with anti-CD3/CD28 beads and  characterized  the  dynamics  of  ASE  events  at  0,  2,  4,  8,  12, 24, 48  and  72  hours  after  stimulation. 
+* [DynamicASE](https://github.com/Wancen/airpartpaper/blob/main/DynamicASE/): [Gutierrez-Arceluset al.(2020)](https://www.nature.com/articles/s41588-020-0579-4) stimulated memory CD4+ T cells from 24 genotyped individuals of European ancestry with anti-CD3/CD28 beads and  characterized  the  dynamics  of  ASE  events  at  0,  2,  4,  8,  12, 24, 48  and  72  hours  after  stimulation. 
 
-* [sim](https://github.com/Wancen/airpartpaper/blob/main/sim/README.md): to assess airpart’s partitioning of cell types by allelic ratio, and its accuracy of estimates of the allelic ratio itself, a number of simulations were performed.
+* [sim](https://github.com/Wancen/airpartpaper/blob/main/sim/): to assess airpart’s partitioning of cell types by allelic ratio, and its accuracy of estimates of the allelic ratio itself, a number of simulations were performed.

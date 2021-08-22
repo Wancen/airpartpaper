@@ -27,7 +27,7 @@ featureQCmetric<-featureQC(sce,sd = 0.02,detection_limit = 5,threshold = 0.25,
 keep_feature<-(featureQCmetric$filter_celltype &
                  featureQCmetric$filter_sd & featureQCmetric$filter_spike)
 table(keep_feature)
-## selecting 1065 genes /1932
+## selecting 1932 genes
 sce<-sce[keep_feature,]
 
 ## selecting genes with high variance of weighted mean

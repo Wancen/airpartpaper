@@ -1,5 +1,5 @@
 # airpartpaper
-Code for analyses in airpart paper
+Code for analyses in [*airpart*](https://github.com/Wancen/airpart) paper
 
 * [Larsson2019](https://htmlpreview.github.io/?https://github.com/Wancen/airpartpaper/blob/main/Larsson2019/Larsson2019.html): [Larsson et al.(2019)](https://www.nature.com/articles/s41586-018-0836-1)  contains  224mouse embryo stem cells (C57BL/6×CAST/EiJ) and 188 mouse embryofibroblasts (CAST/EiJ×C57BL/6J) including across states of cell cycle(G1, S, G2M), as identified by the author
   
@@ -7,7 +7,6 @@ Code for analyses in airpart paper
 
 * [spatialDmelxsim](https://github.com/Wancen/airpartpaper/blob/main/spatialDmelxsim/spatialDmelxsim.R): [Combsand Fraser (2018)](https://doi.org/10.1371/journal.pgen.1007631) performed RNA-seq of five hybrid Drosophila species D.melanogaster×D.simulans  embryos  sliced  along  their  anterior-posterior axis to identify genes with spatially varying allelic imbalance.
 
-* [sim](https://github.com/Wancen/airpartpaper/blob/main/sim): 
-   * [sim.R](https://github.com/Wancen/airpartpaper/blob/main/sim/sim.R): To assess airpart’s partitioning of cell types by allelic ratio. Half of the total counts were drawn from a NB with a low mean count of 2 while half of the total counts were drawn from a NB with a higher mean count that ranged across different simulations among values of $cnt \in \{5, 10, 20\}$. The number of gene within a gene cluster was varied across $g \in \{5,10,20\}$.
-   * [comparison.R](https://github.com/Wancen/airpartpaper/blob/main/sim/comparison.R): For evaluating estimation accuracy as well as assessing the effect of similar cell types partition by comparing  with group step and  without group step
-   * [DAI_test.R](https://github.com/Wancen/airpartpaper/blob/main/sim/DAI_test.R): For testing DAI statistical significance, we simulated one without DAI \{0.5,0.5,0.5,0.5,0.5,0.5\} and with DAI \{0.5,0.5,0.6,0.6,0.7,0.7\} on 6 cell types
+* [DynamicASE](https://github.com/Wancen/airpartpaper/blob/main/DynamicASE/README.md): [Gutierrez-Arceluset al.(2020)](https://www.nature.com/articles/s41588-020-0579-4) stimulated memory CD4+ T cells from 24 genotyped individuals of European ancestry with anti-CD3/CD28 beads and  characterized  the  dynamics  of  ASE  events  at  0,  2,  4,  8,  12, 24, 48  and  72  hours  after  stimulation. 
+
+* [sim](https://github.com/Wancen/airpartpaper/blob/main/sim/README.md): to assess airpart’s partitioning of cell types by allelic ratio, and its accuracy of estimates of the allelic ratio itself, a number of simulations were performed.

@@ -137,6 +137,65 @@ lower<-extractResult(sce_sub,"lower")
 upper<-extractResult(sce_sub,"upper")
 makeHeatmap(sce_sub, order_by_group = F,show_row_names = T)
 
+## scdali
+Sys.setenv(RETICULATE_PYTHON = "/nas/longleaf/home/wancen/.conda/envs/scdali/bin/python")
+library(reticulate)
+library(SingleCellExperiment)
+library(airpart)
+library(pbapply)
+library(tidyverse)
+# use_python("C:/Users/wancenmu/anaconda3/envs/scdali/python.exe", required = TRUE)
+source_python("/proj/milovelab/mu/SC-ASE/simulation/scdali/test.py")
+# import numpy and specify no automatic Python to R conversion
+np <- import("numpy", convert = FALSE)
+
+ase <- assays(sce_sub)[["a1"]]
+cts <- assays(sce_sub)[["counts"]]
+x<-sce_sub$x %>% as.numeric()
+np.x<-np_array(x,dtype = "float64")
+np.ase<-np_array(t(ase),dtype = "float64")
+np.cts<-np_array(t(cts),dtype = "float64")
+t_dali <- system.time(
+  scdali <- pbsapply(1:nrow(sce_sub), function(i) {
+    np.ase<-np_array(t(ase[i,]),dtype = "float64")
+    np.ase <- array_reshape(np.ase, c(ncol(sce_sub),1))
+    np.cts<-np_array(t(cts[i,]),dtype = "float64")
+    np.cts <- array_reshape(np.cts, c(ncol(sce_sub),1))
+    res <- tryCatch({
+      obj <-practice(np.ase,np.cts,np.x,ncores=1)
+      obj <- do.call(c,obj)
+      return(obj)
+    }, error = function(e) {return(rep(NA,2*ncol(sce_sub))) })
+  }))[[3]]
+
+values<-rle(x)$lengths
+x_start<-cumsum(c(1,values))[1:nct]
+ar_scdali<-scdali[1:ncol(sce_sub),]
+sd_scdali<-scdali[(ncol(sce_sub)+1):(2*ncol(sce_sub)),]
+mu<-ar_scdali[x_start,] %>% t() %>% `rownames<-`(rownames(sce_sub))
+library(reshape2)
+ar_long <- melt(mu, id = "slice", value.name = "ar") %>% `colnames<-`(c("gene","slice","ar"))
+ar_long$slice <- factor(ar_long$slice)
+raw <- assay(sce_sub, "ratio")
+Q <- quantile(raw, probs=c(.25, .75), na.rm = T)
+iqr <- IQR(raw, na.rm = T)
+up <-  Q[2]+1.5*iqr # Upper Range
+low<- Q[1]-1.5*iqr # Lower RangeÃ¿
+scdali<-ggplot(ar_long %>% filter(gene!="ICA69"), aes(x = slice,y = ar)) +
+  geom_point() +
+  # geom_step(group = 1) +
+  theme_minimal()+
+  ylim(low,up) +
+  ggplot2::geom_hline(yintercept = 0.5, colour = "gray40", linetype = "dashed") +
+  theme(strip.text = element_text(size=20),
+        legend.position="none",
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = 'transparent'),
+        axis.text.x = element_text(angle = 90, vjust = 1, hjust=1,size=8)) +
+  labs(x = "grouped slices", y = "allelic ratio") +
+  facet_wrap(~gene)
+
+
 ## Overall trend
 sce <- sce_sub
 part <- metadata(sce)$part
@@ -167,4 +226,30 @@ p <- ggplot2::ggplot(part, aes(x = .data$x, y = .data$coef)) +
   labs(x = "grouped slices", y = "allelic ratio")
 p
 
+## no group step
+sce_sub <- sce[rowData(sce)$cluster==10]
+sce_sub$part <- sce_sub$x
+sce_sub <- allelicRatio(sce_sub)
+library(reshape2)
+ar<-extractResult(sce_sub,"ar") %>% as.data.frame()
+ar$gene <- rownames(ar)
+ar_long <- ar %>% gather(key=slice,value=ar,X1:X19)
+ar_long$slice <- factor(rep(1:19,each=7))
+ar_long$gene <- factor(ar_long$gene,ordered = T,levels = rownames(ar))
+nogroup<-ggplot(ar_long %>% filter(gene!="ICA69"), aes(x = slice,y = ar)) +
+  geom_point() +
+  # geom_step(group = 1) +
+  theme_minimal()+
+  ylim(low,up) +
+  ggplot2::geom_hline(yintercept = 0.5, colour = "gray40", linetype = "dashed") +
+  theme(strip.text = element_text(size=13),
+        legend.position="none",
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = 'transparent'),
+        axis.text.x = element_text(angle = 90, vjust = 1, hjust=1,size=8)) +
+  labs(x = "grouped slices", y = "allelic ratio") +
+  facet_wrap(~gene)
+jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/suppspatial_nogroup.jpg",width = 8, height = 5.2,units = "in",res=450)
+nogroup
+dev.off()
 # save(sce,file="C:/Users/wancenmu/OneDrive - University of North Carolina at Chapel Hill/Lab/Github/airpartpaper/data/spatial.RData")

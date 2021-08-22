@@ -101,15 +101,11 @@ t_fl <- system.time(
 t_fl_gaussian <- system.time(
   fl_gaussian <- pbsapply(1:nrow(sce), function(i) {
     res <- tryCatch({
-      if(i<=400){
-        sce_sub <- fusedLasso(sce,model="gaussian",genecluster = i,ncores=1,se.rule.mult = 0.5)
-      }else{
-        if(i>800 & i<=1200){
+      if(i<=1200){
           sce_sub <- fusedLasso(sce,model="gaussian",genecluster = i,ncores=1,se.rule.mult = 0.5)
         }else{
           sce_sub <- fusedLasso(sce,model="gaussian",genecluster = i,ncores=1)
         }
-      }
       # index <- nlevels(metadata(sce_sub)$partition$part)>1
       sce_sub <- allelicRatio(sce_sub)
       est <- extractResult(sce_sub)%>% as.matrix()

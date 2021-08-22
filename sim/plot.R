@@ -288,6 +288,9 @@ datci2$type <- factor(datci2$type,ordered = F, levels = paste(rep(c("binomial","
                       labels  = paste(rep(c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"),each=nct),rep(paste0("ct",1:nct),5),sep = "."))
 datci2$method <- rep(c(rep("airpart.bin",nct),rep("airpart.gau",nct),rep("airpart.nogroup",nct),rep("scdali",nct),rep("airpart.np",nct)),length(ardiff))
 
+datci2$method <- factor(datci2$method,ordered = T, levels = c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"),
+                      labels  = c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"))
+
 pci40<-ggplot(datci2,mapping = aes(x=type,y=coverge,fill=method)) +
   geom_bar(stat="identity") +
   theme_minimal() +
@@ -305,12 +308,12 @@ pci60<-ggplot(datci2,mapping = aes(x=type,y=coverge,fill=method)) +
   geom_bar(stat="identity") +
   theme_minimal() +
   scale_fill_igv()+
-  theme(legend.position = "none",panel.grid.minor = element_blank(),
+  theme(legend.position = "bottom",panel.grid.minor = element_blank(),
         panel.border = element_rect(fill = 'transparent'),
         axis.text.x = element_text(angle = 90, vjust = 1, hjust=1,size=8)) +
   xlab("Allelic ratio difference")+
-  facet_wrap(~ar) +
-  scale_x_discrete(breaks=paste(rep(c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"),each=nct),rep(paste0("ct",1:nct),4),sep = "."),
+  facet_wrap(~ar)+
+  scale_x_discrete(breaks=paste(rep(c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"),each=nct),rep(paste0("ct",1:nct),5),sep = "."),
                    labels=rep(c(paste0("ct",1:nct)),5))
 jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/suppsim2.jpg",width = 14, height = 10,units = "in",res=450)
 p1+ pci40 / pci60 + plot_annotation(tag_levels = 'A')

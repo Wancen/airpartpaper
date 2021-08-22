@@ -1,0 +1,18 @@
+shell.executable("/bin/bash")
+shell.prefix("source ~/.bashrc;")
+
+configfile: "config.json"
+
+rule all:
+    input:
+        expand("csv/n{ngenecl}_mu{mu2}.csv", ngenecl=config["ngenecl"], mu2=config["mu2"])
+
+rule smurf:
+    output: "csv/n{ngenecl}_mu{mu2}.csv"
+    benchmark: "bench/n{ngenecl}_mu{mu2}.bench"
+    shell:
+        """
+	module load r/4.0.3
+	R CMD BATCH --no-save --no-restore '--args {wildcards.ngenecl} {wildcards.mu2} {output}' sim.R log/n{wildcards.ngenecl}_mu{wildcards.mu2}.Rout
+
+	"""

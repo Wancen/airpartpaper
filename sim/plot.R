@@ -263,14 +263,18 @@ p1
 dev.off()
 
 ## CI coverage
-scdali_lower <-mu-sd
-scdali_upper <- mu+sd
+scdali_lower <-mu-qnorm(0.95)*sd
+scdali_upper <- mu+qnorm(0.95)*sd
 ngene = 1600
+poi_scdali <- which(is.na(colSums(mu)))
 ci_scdali <- matrix(0,nrow = ngene,ncol = nct) %>% `colnames<-`(paste("scdali",paste0("ct",1:nct)))
 ci_scdali[which(true<t(scdali_upper) & true>t(scdali_lower))]<-1
+ci_scdali[poi_scdali,]<-NA
 
+poi_binomial <- which(is.na(colSums(lower_binomial)))
 ci_binomial <- matrix(0,nrow = ngene,ncol = nct)%>% `colnames<-`(paste("binomial",paste0("ct",1:nct)))
 ci_binomial[which(true<t(upper_binomial) & true>t(lower_binomial))]<-1
+ci_binomial[poi_binomial,]<-NA
 
 ci <- matrix(0,nrow = ngene,ncol = nct)%>% `colnames<-`(paste("nogroup",paste0("ct",1:nct)))
 ci[which(true<t(upper) & true>t(lower))]<-1
@@ -283,7 +287,11 @@ ci_wilcoxon[which(true<t(upper_wilcoxon) & true>t(lower_wilcoxon))]<-1
 
 datci <- data.frame(cbind(ci_scdali,ci,ci_binomial,ci_gaussian,ci_wilcoxon),
                     ar=factor(c(rep(round(ardiff,3),each=400))))
-datci2<-datci %>% gather(key=type,value=coverage,scdali.ct1:wilcoxon.ct8) %>% group_by(ar,type) %>% summarise(coverge=sum(coverage)/400)
+datci2<-datci %>% gather(key=type,value=coverage,scdali.ct1:wilcoxon.ct8)
+datci2 <- datci2[!is.na(datci2$coverage),]
+library(dplyr)
+detach("package:plyranges", unload=TRUE)
+datci2<-datci2%>% group_by(ar,type) %>% dplyr::summarise(coverge=sum(coverage,na.rm=T)/n())
 datci2$type <- factor(datci2$type,ordered = F, levels = paste(rep(c("binomial","gaussian","wilcoxon","nogroup","scdali"),each=nct),rep(paste0("ct",1:nct),5),sep = "."),
                       labels  = paste(rep(c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"),each=nct),rep(paste0("ct",1:nct),5),sep = "."))
 datci2$method <- rep(c(rep("airpart.bin",nct),rep("airpart.gau",nct),rep("airpart.nogroup",nct),rep("scdali",nct),rep("airpart.np",nct)),length(ardiff))

@@ -118,7 +118,7 @@ metadata(sce)$geneCluster
 
 Quickly look at the weighted mean of allelic ratio for each gene cluster. Identify the interested gene cluster. Note that we recommend users only run `airpart` when the largest ordered allelic ratio difference > 0.05 for speed concerns. We find that the allelic ratio of most of the gene clusters in such cases (small absolute allelic ratio differences) won't provide enough evidence to detect differential allelic imbalance.
 
-Because we are modlling including zygote that mainly involves maternal effect, we find out all clusters exists differential alleic imbalance. 
+Because we are modlling including zygote that mainly involves maternal effect, we find out all clusters exists differential alleic imbalance because weighted allelic ratio mean all really close to 0. 
 ```{r}
 summary<-summaryAllelicRatio(sce)
 sapply(1:length(summary), function(i) {
@@ -127,33 +127,44 @@ sapply(1:length(summary), function(i) {
   max(diff(inst_order$weighted.mean)) > 0.05
 })
 ```
-Here we use gene cluster 8 as an example. Since it has higher dispersion, we will use nonparametric approach to partitioning the cell types.
-
-### Modeling using fused lasso with binomial likelihood
-
-*airpart* offers a method for partitioning cell types using the
-generalized fused lasso with binomial likelihood, as implemented in
-the *smurf* package. Cell types are merged based on their similarity
-of allelic ratios, accounting for excess variability on the ratio from
-low counts. The penalization is determined using deviance on held-out
-data, with a 1 SE cross-validation rule for favoring smaller models
-(more fused cell types).
-
+Hence, we remove the zygote and early2cell cell types and redo the analysis to lower the maternal effect and try to find any meaningful gene sets.
 
 ```{r}
-estDisp(sce,genecluster = 8)
-sce_sub <- fusedLasso(sce,
-  model = "binomial",
-  genecluster = 7, ncores = 4
-)
+sce <- sce[,sce$x%in%cell_meta_unique[3:10]]
+sce$x <- factor(sce$x,cell_meta_unique[3:10])
+sce<-geneCluster(sce, G=seq(4,20,4))
+metadata(sce)$geneCluster
+summary<-summaryAllelicRatio(sce)
+sapply(1:length(summary), function(i) {
+  inst <- summary[[i]]
+  inst_order <- inst[order(inst$weighted.mean), ]
+  max(diff(inst_order$weighted.mean)) > 0.05
+})
+```
+
+Here we use gene cluster 10 as an example. Since it has higher dispersion, we will use nonparametric approach to partitioning the cell types.
+
+### Modeling using non-paramateric method
+
+*airpart* offers a method for partitioning cell types using non-parametric method because we find that when the allelic counts deviates strongly from a binomial
+(e.g. large over-dispersion, small values of `theta`).
+we have implemented wherein all pairs cell types are
+compared with Mann-Whitney-Wilcoxon rank sum tests. Cell types are merged based on their similarity of allelic ratios, accounting for excess variability on the ratio from
+low counts. 
+
+```{r}
+estDisp(sce,genecluster = 10)
+sce_sub <- wilcoxExt(sce, genecluster = 10,threshold = 10^seq(from=-4,to=-2,by=0.2))
 knitr::kable(metadata(sce_sub)$partition,row.names = F)
 ```
 
 
 ### Heatmap to show the cell types partition:
 
-```{r fig.width=12, fig.height=8}
+```{r fig.width=12, fig.height=10}
+# jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/heatmap_Deng.jpeg",width = 10, height = 9,units = "in",res=450)
 makeHeatmap(sce_sub,order_by_group = FALSE,show_row_names = T)
+# dev.off()
 ```
 
 ### Calculating allelic ratio estimate via hierarchical Bayesian modeling
@@ -201,25 +212,25 @@ makeViolin <- function(sce, xlab = "cell type", ylim = c(0,1)) {
 makeViolin(sce_sub)
 ```
 
-### Step plot to show group prior mean allelic ratios on y-axis across 
-```{r}
-sce <- sce_sub
-part <- metadata(sce)$part
-part$coef <- 1/(1+exp(-part$coef))
-part$x <- factor(part$x,levels = cell_meta_unique)
-p <- ggplot2::ggplot(part, aes(x = .data$x, y = .data$coef)) +
-  ggplot2::geom_point(aes(color = .data$part)) +
-  ggplot2::geom_step(group = 1) +
-  ggplot2::geom_hline(yintercept = 0.5, colour = "gray40", linetype = "dashed") +
-  theme_minimal() +
-  theme(
-    legend.position = "bottom",
-    panel.grid.minor = element_blank(),
-    panel.border = element_rect(fill = "transparent"),
-    axis.text.x = element_text(angle = 90, vjust = 1, hjust=1,size=8)
-  ) +
-  labs(x = "cell types", y = "allelic ratio")
-p
+# GO term analysis
+
+Through GO term evaluation, we can find this gene set has several biological processes are significant different with others, such as `cell development` (GO:0006139) with p.adj=0.0017, `lipid modification`(GO: 0030258) with p.adj = 0.0160 and `cell differentiation` (GO:0030154) with p.adj= 0.0233.
+```{r, results="asis"}
+suppressMessages(suppressWarnings(library(goseq)))
+suppressMessages(suppressWarnings(library(kableExtra)))
+i=10
+feat<-which(rowData(sce)$cluster==i)
+genes <- rep(0,nrow(sce))
+names(genes) <- rownames(sce)
+genes[feat] <- 1
+table(genes)
+suppressMessages(pwf <- nullp(genes, "mm9", "geneSymbol"))
+suppressMessages(gores <- goseq(pwf, "mm9", "geneSymbol")) 
+p_adjust <- p.adjust(gores$over_represented_pvalue,method = "fdr")
+gores$`p.adjust`<-p_adjust
+head(gores[gores$ontology=="BP" & gores$numInCat>15,], 20) %>% 
+  kbl() %>%
+  kable_paper("hover", full_width = F)
 ```
 
 

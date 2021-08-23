@@ -233,6 +233,7 @@ note that we preprocess the allelic ration according to strain, so the maternal 
 ```{r, echo=FALSE, message=FALSE}
 suppressMessages(suppressWarnings(library(forestplot)))
 suppressMessages(suppressWarnings(library(RColorBrewer)))
+suppressMessages(suppressWarnings(library("ggsci")))
 makeViolin <- function(sce, xlab = "cell type") {
   ar <- rowData(sce)[, c(grep("ar", colnames(rowData(sce)), value = TRUE))] %>%
     `colnames<-`(levels(sce$x))
@@ -256,7 +257,7 @@ makeViolin <- function(sce, xlab = "cell type") {
       panel.grid.minor = element_blank(),
       panel.border = element_rect(fill = "transparent")
     ) +
-    scale_fill_brewer(palette = "Set2") +
+    scale_fill_igv()+
     labs(x = xlab, y = "maternal allelic ratio")
   p
 }
@@ -266,7 +267,7 @@ makeForest <- function(sce, genepoi, ctpoi = seq_len(nlevels(sce$x)), showtext =
                          gp = gpar(lty = 2, col = "#CCCCFF")
                        ), ...) {
     qual_col_pals <- brewer.pal.info[brewer.pal.info$category == "qual", ]
-    col_vector <- unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+    col_vector <- pal_igv("default")(5)
   if (missing(xticks)) {
     xticks <- seq(from = 0, to = 1, by = 0.1)
     xtlab <- rep(c(TRUE, FALSE, TRUE, FALSE, FALSE), length.out = length(xticks))
@@ -275,20 +276,26 @@ makeForest <- function(sce, genepoi, ctpoi = seq_len(nlevels(sce$x)), showtext =
   if (missing(col)) {
     col <- fpColors(box = col_vector[seq_len(length(ctpoi))])
   }
-  ar <- rowData(sce)[, c(grep("svalue", colnames(rowData(sce)), value = TRUE))] %>% `colnames<-`(levels(sce$x))
+  ar <- rowData(sce)[, c(grep("ar_", colnames(rowData(sce)), value = TRUE))] %>% `colnames<-`(levels(sce$x))
   if (showtext) {
     forest_text <- data.frame(`Gene` = rownames(sce), ar[, ctpoi])
   } else {
     forest_text <- data.frame(Gene = rownames(sce)) %>% `rownames<-`(rownames(ar))
   }
   if (missing(genepoi)) {
-    smin <- apply(apply(ar, 2, as.numeric), 1, min)
-    genepoi <- head(order(smin), min(40, nrow(sce)))
+    # smin <- apply(apply(ar, 2, as.numeric), 1, min)
+    genepoi <- head(order(ar$mESC,decreasing = T), min(30, nrow(sce)))
   }
   forest_text <- rbind(colnames(forest_text), forest_text[genepoi, ] %>% as.data.frame())
   message("svalue shown in columns per cell type")
   mean = rbind(rep(NA, length(ctpoi)), rowData(sce)[genepoi, c(grep("ar", colnames(rowData(sce)), value = TRUE))[ctpoi]] %>% as.matrix())
   mean[,2:4] = 1 - mean[,2:4]
+  lower = rbind(rep(NA, length(ctpoi)), rowData(sce)[genepoi, c(grep("lower", colnames(rowData(sce)), value = TRUE))[ctpoi]] %>% as.matrix())
+  upper = rbind(rep(NA, length(ctpoi)), rowData(sce)[genepoi, c(grep("upper", colnames(rowData(sce)), value = TRUE))[ctpoi]] %>% as.matrix())
+  lower2 <- lower
+  lower2[,2:4] <- 1 - upper[,2:4]
+  upper2 <- upper
+  upper2[,2:4] <- 1 - lower[,2:4]
   forestplot::forestplot(forest_text,
     is.summary = c(TRUE, rep(FALSE, nrow(forest_text) - 1)),
     hrzl_lines = list("2" = gpar(lty = 2)),
@@ -300,8 +307,8 @@ makeForest <- function(sce, genepoi, ctpoi = seq_len(nlevels(sce$x)), showtext =
     ),
     boxsize = boxsize, graphwidth = unit(15, "cm"),
     mean = mean,
-    lower = rbind(rep(NA, length(ctpoi)), rowData(sce)[genepoi, c(grep("lower", colnames(rowData(sce)), value = TRUE))[ctpoi]] %>% as.matrix()),
-    upper = rbind(rep(NA, length(ctpoi)), rowData(sce)[genepoi, c(grep("upper", colnames(rowData(sce)), value = TRUE))[ctpoi]] %>% as.matrix()),
+    lower = lower2,
+    upper=upper2,
     clip = c(0.01, 1), xticks = xticks, ref = 0.5,
     col = col, xlab = xlab
   )
@@ -309,20 +316,24 @@ makeForest <- function(sce, genepoi, ctpoi = seq_len(nlevels(sce$x)), showtext =
 ```
 
 ```{r}
+# jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/larssonviolin.jpeg",width = 3, height = 2.5,units = "in",res=450)
 makeViolin(sce_sub)
+# dev.off()
 ```
 
 ```{r, warning=FALSE, fig.width=12}
-# jpeg(file="C:/Users/wancenmu/OneDrive - University of North Carolina at Chapel Hill/Lab/Github/airpartpaper/plot/forest.jpeg",width = 8, height = 6,units = "in",res=450)
+# jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/forest.jpeg",width = 10, height = 6,units = "in",res=450)
 makeForest(sce_sub,showtext = FALSE)
 # dev.off()
 ```
 
 # GO term analysis
 
-Through GO term evaluation, we can find indeed `response to leukemia inhibitory factor` GO terms(GO:1990823) has the most significant p value = 0.0000283.
+Through GO term evaluation, we can find indeed `response to leukemia inhibitory factor` GO terms(GO:1990823) has the most significant adjust p value = 0.136.
+
 ```{r, results="asis"}
 suppressMessages(suppressWarnings(library(goseq)))
+suppressMessages(suppressWarnings(library(kableExtra)))
 i=3
 feat<-which(rowData(sce)$cluster==i)
 genes <- rep(0,nrow(sce))
@@ -333,7 +344,9 @@ suppressMessages(pwf <- nullp(genes, "mm9", "geneSymbol"))
 suppressMessages(gores <- goseq(pwf, "mm9", "geneSymbol")) 
 p_adjust <- p.adjust(gores$over_represented_pvalue,method = "fdr")
 gores$`p.adjust`<-p_adjust
-knitr::kable(head(gores[gores$ontology=="BP" & gores$numInCat>15,], 15))
+head(gores[gores$ontology=="BP" & gores$numInCat>15,], 15) %>% 
+  kbl() %>%
+  kable_paper("hover", full_width = F)
 ```
 
 # Enrichment analysis
@@ -445,7 +458,9 @@ p<-ggplot(or, aes(x=or)) +
     aes(x,y),
     color="red",
     size=4)
+# jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/permutate.jpeg",width = 3, height = 2,units = "in",res=450)
 p
+# dev.off()
 ```
 
 # Session Info

@@ -1,5 +1,7 @@
 ## main1
 library(patchwork)
+library(tidyr)
+library(dplyr)
 load("C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/scdali/default_n40_rbf.rda")
 nct <-8
 n=40
@@ -298,11 +300,14 @@ datci2$method <- rep(c(rep("airpart.bin",nct),rep("airpart.gau",nct),rep("airpar
 
 datci2$method <- factor(datci2$method,ordered = T, levels = c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"),
                       labels  = c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"))
-
+library(ggplot2)
+library(ggsci)
 pci40<-ggplot(datci2,mapping = aes(x=type,y=coverge,fill=method)) +
   geom_bar(stat="identity") +
   theme_minimal() +
   scale_fill_igv()+
+  geom_hline(yintercept=0.95, linetype="dashed",
+             color = "red", size=1)+
   theme(legend.position = "none",panel.grid.minor = element_blank(),
         panel.border = element_rect(fill = 'transparent'),
         axis.text.x = element_text(angle = 90, vjust = 1, hjust=1,size=8)) +
@@ -316,6 +321,8 @@ pci60<-ggplot(datci2,mapping = aes(x=type,y=coverge,fill=method)) +
   geom_bar(stat="identity") +
   theme_minimal() +
   scale_fill_igv()+
+  geom_hline(yintercept=0.95, linetype="dashed",
+             color = "red", size=1)+
   theme(legend.position = "bottom",panel.grid.minor = element_blank(),
         panel.border = element_rect(fill = 'transparent'),
         axis.text.x = element_text(angle = 90, vjust = 1, hjust=1,size=8)) +

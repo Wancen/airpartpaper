@@ -3,7 +3,7 @@ title: "Deng2014"
 author: 
   - name: Wancen Mu, Hirak Sarkar, Avi Srivastava, Kwangbom Choi, 
           Rob Patro, Michael I. Love
-date: "Feb 1, 2021"
+date: "`r format(Sys.Date(), '%m/%d/%Y')`"
 abstract: |
   Airpart identifies sets of genes displaying differential
   cell-type-specific allelic imbalance across cell types
@@ -21,10 +21,6 @@ output:
     toc_float: true 
     theme: united  
     highlight: tango  
-vignette: |
-  %\VignetteIndexEntry{Practice with Deng2014 data}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup, include=FALSE, warning=FALSE}
@@ -34,14 +30,14 @@ suppressMessages(suppressWarnings(library(airpart)))
 
 # Load data
 
-First, we load the preprocessed [Deng 2014](https://www.nature.com/articles/s41586-018-0836-1) data. It includes one maternal allelic counts(`b6`) and paternal allelic counts(`cast`) which was derived after removing some low quality cells indicated in the previous paper. `celltype` is a character vector of all cell types.
+First, we load the preprocessed [Deng 2014](https://science.sciencemag.org/content/343/6167/193.long) data. It includes one maternal allelic counts(`cast`) and paternal allelic counts(`b6`) which was derived after removing some low quality cells indicated in the previous paper. `celltype` is a character vector of all cell types.
 
 ```{r}
 suppressPackageStartupMessages(library(SingleCellExperiment))
 load("../data/Deng.rda")
 cell_meta_unique <- c("zy","early2cell","mid2cell","late2cell","4cell","8cell","16cell","earlyblast","midblast","lateblast") 
 order_of_development <- order(match(celltype,cell_meta_unique))
-assay.list<-list(a1=b6[,order_of_development],a2=cast[,order_of_development])
+assay.list<-list(a1=cast[,order_of_development],a2=b6[,order_of_development])
 coldata<-data.frame(x=factor(celltype[order_of_development],levels=cell_meta_unique))
 sce<-SingleCellExperiment(assays=assay.list, colData=coldata)
 ```

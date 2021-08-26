@@ -1,5 +1,6 @@
 load(file="./data/dynamicASE.rda")
-
+library(tidyverse)
+library(airpart)
 ## Construct sce and QC
 remove <- which(names(index)=="Intergenic")
 a1_new<-a1_new[order_of_development,]
@@ -48,15 +49,16 @@ summary_select2 <- do.call(cbind,sce_select)
 weighted_mean <- summary_select2[,seq(2,ncol(summary_select2),4)] %>% as.matrix()
 varindex <- order(colVars(weighted_mean), decreasing=TRUE)
 # index <- head(order(colVars(weighted_mean), decreasing=TRUE),50)
-top50_name <- row.names(sce)[varindex]
-top50<- weighted_mean[,varindex] %>% `colnames<-`(top50_name)
+weighted_name <- row.names(sce)[varindex]
+ordered_weighted_mean<- weighted_mean[,varindex] %>% `colnames<-`(weighted_name)
 
 ### See dynamic genes in paper
 interest_gene <- c("HLA-DQB","DDX11","CASP8","PITRM1","F11R","UBASH3A","IL10","GNLY","CD3G")
 for (gene in interest_gene) {
-  print(which(str_detect(top50_name,gene)))
+  print(which(str_detect(weighted_name,gene)))
 }
 
+## selecting top 50 genes
 sce <- sce[varindex[1:50],]
 mcols(sce)$cluster <- seq_len(nrow(sce))
 
@@ -86,7 +88,7 @@ res <- pbsapply(seq_len(nrow(sce)),function(g){
 },cl=8)
 colnames(res) <-rownames(sce)
 
-save(res,file="./data/dynamicASE_top50.rda")
+save(res,sce,ordered_weighted_mean,file="./data/dynamicASE_top50.rda")
 load("./data/dynamicASE_top50.rda")
 
 ## Cluster genes with same transcriptional cis regulatory programs: Late-Spike, Constant-Low, and Fluctuating

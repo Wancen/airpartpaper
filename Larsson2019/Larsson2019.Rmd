@@ -199,10 +199,77 @@ sce_sub <- fusedLasso(sce,
 )
 ```
 
+```{r, echo=FALSE, message=FALSE}
+suppressMessages(suppressWarnings(library(RColorBrewer)))
+suppressMessages(suppressWarnings(library(ComplexHeatmap)))
+makeHeatmap <- function(sce, assay = c("ratio_pseudo", "ratio", "counts"), genecluster = NULL,
+                        show_row_names = FALSE, order_by_group = TRUE, ...) {
+  assay <- match.arg(assay, c("ratio_pseudo", "ratio", "counts"))
+  qual_col_pals <- brewer.pal.info[brewer.pal.info$category == "qual", ]
+  col_vector <- unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+  if (is.null(genecluster)) {
+    m <- assays(sce)[[assay]]
+  } else {
+    m <- assays(sce[rowData(sce)$cluster == genecluster, ])[[assay]]
+  }
+  if (assay == "counts") {
+    name <- "Total counts"
+  } else {
+    name <- "Allelic Ratio"
+  }
+  if (is.null(sce$part)) {
+    split <- NULL
+    ha <- ComplexHeatmap::HeatmapAnnotation(
+      `cell type` = sce$x, border = FALSE,
+      col = list(`cell type` = structure(col_vector[seq_len(nlevels(sce$x))],
+        names = levels(sce$x)
+      ))
+    )
+  } else {
+    if (order_by_group) {
+      split <- sce$part
+      ha <- ComplexHeatmap::HeatmapAnnotation(
+        group = anno_block(
+          gp = gpar(fill = col_vector[seq_len(nlevels(split))]),
+          labels_gp = gpar(col = "white", fontface = 4),
+          labels = paste0("G", seq_len(nlevels(split)))
+        ),
+        `cell type` = sce$x, border = FALSE, group = sce$part,
+        col = list(`cell type` = structure(col_vector[seq_len(nlevels(sce$x))],
+          names = levels(sce$x)
+        ))
+      )
+    } else {
+      split0 <- rle(as.numeric(sce$part))
+      y <- split0$lengths
+      split <- rep(seq_along(y), y)
+      ha <- ComplexHeatmap::HeatmapAnnotation(
+        group = anno_block(
+          gp = gpar(fill = col_vector[split0$values]),
+          labels_gp = gpar(col = "white", fontface = 4),
+          labels = paste0("Group", split0$values)
+        ),
+        `cell type` = sce$x, border = FALSE,
+        col = list(`cell type` = structure(col_vector[seq_len(nlevels(sce$x))],
+          names = levels(sce$x)
+        ))
+      )
+    }
+  }
+  ComplexHeatmap::Heatmap(m,
+    column_split = split, column_title = NULL, top_annotation = ha,
+    column_order = order(seq_len(ncol(m))), cluster_columns = FALSE,
+    cluster_rows = FALSE, name = name,
+    show_column_names = FALSE, show_row_names = show_row_names
+  )
+}
+```
+
+
 Use table and heatmap to visualize the result.
 ```{r, results="asis"}
 # knitr::kable(metadata(sce_sub)$partition, row.names = FALSE)
-# jpeg(file="C:/Users/UNC Support/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/heatmap_larsson.jpeg",width = 8, height = 7,units = "in",res=450)
+# jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/heatmap_larsson.jpeg",width = 8, height = 6,units = "in",res=450)
 makeHeatmap(sce_sub, order_by_group = FALSE,show_row_names = F)
 # dev.off()
 ```
@@ -232,7 +299,6 @@ note that we preprocess the allelic ration according to strain, so the maternal 
 
 ```{r, echo=FALSE, message=FALSE}
 suppressMessages(suppressWarnings(library(forestplot)))
-suppressMessages(suppressWarnings(library(RColorBrewer)))
 suppressMessages(suppressWarnings(library("ggsci")))
 makeViolin <- function(sce, xlab = "cell type") {
   ar <- rowData(sce)[, c(grep("ar", colnames(rowData(sce)), value = TRUE))] %>%

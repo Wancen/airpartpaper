@@ -1,4 +1,4 @@
-# The way we pre-filter the genes and save the result in "./data/spatialDmelxsim.rData"
+# The way we pre-filter the genes by QC and LRT and save the result in "./data/spatial.RData"
 
 # load("./data/spatialDmelxsim.rda")
 # # Find correlation

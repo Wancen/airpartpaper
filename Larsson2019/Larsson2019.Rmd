@@ -289,10 +289,15 @@ the conditional cell type means per partition group and accounting for each gene
 ```{r}
 sce_sub <- allelicRatio(sce_sub)
 svalue <- extractResult(sce_sub,estimates = "svalue")
+fsr <- extractResult(sce_sub,estimates = "fsr")
 lower <- extractResult(sce_sub,"lower")
 upper <- extractResult(sce_sub,"upper")
-indexci<- which(lower[,2]<0.5 & upper[,2]>0.5)
-indexs<- which(as.numeric(svalue[,2])>0.05)
+## number of genes are allelic imbalance in stem cell
+indexci<- which(svalue[,1]<0.005)
+length(indexci)
+## number of genes are allelic imbalance in fibroblast
+indexci<- which(svalue[,2]<0.005)
+length(indexci)
 ```
 A violin plot with posterior mean allelic ratios on the y-axis:
 note that we preprocess the allelic ration according to strain, so the maternal allelic ratio for fibroblast is 1-estimates
@@ -382,9 +387,9 @@ makeForest <- function(sce, genepoi, ctpoi = seq_len(nlevels(sce$x)), showtext =
 ```
 
 ```{r}
-# jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/larssonviolin.jpeg",width = 3, height = 2.5,units = "in",res=450)
+jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/larssonviolin2.jpeg",width = 4.5, height = 2.5,units = "in",res=450)
 makeViolin(sce_sub)
-# dev.off()
+dev.off()
 ```
 
 ```{r, warning=FALSE, fig.width=12}
@@ -489,13 +494,18 @@ overlaptxb_prom_total<- c(sum(overlaptxb_prom$peak_count.x,na.rm = T),sum(overla
 overlaptxb_other_prom<-get_overlap(prom,feat_other,mESC_filter,mef_filter)
 
 overlaptxb_otherprom_total<- c(sum(overlaptxb_other_prom$peak_count.x,na.rm = T),sum(overlaptxb_other_prom$peak_count.y,na.rm = T))
-## calculate pvalue
-res<-fisher.test(matrix(c(overlaptxb_prom_total,overlaptxb_otherprom_total),ncol=2,byrow = T),alternative = "g")
-res$p.value
 
 ```
 
-### permutation test
+```{r}
+contagency_table<-matrix(c(overlaptxb_prom_total,overlaptxb_otherprom_total),ncol=2,byrow = T)
+print(contagency_table)
+## calculate pvalue
+res<-fisher.test(contagency_table,alternative = "g")
+res$p.value
+```
+
+### Permutation test
 Random  sampled  the  same  number  of genes in the interested gene cluster from the null cluster and the interested gene cluster and calculate odds ratio of stem cell verses fibroblast among the  sampled  genes  and  the  left  genes.  Repetitive  500  times.  Sampling distribution of the odds ratio was roughly following Gaussian distribution. And the odds ratio calculated from original data is far away from the sampling distribution, indicating that this gene cluster are significantly differ with null (p <10−4) and it is consistent with Fisher-exact test results.
 ```{r, eval=T}
 library(pbapply)

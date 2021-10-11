@@ -92,7 +92,8 @@ plotGene <- function(gene) {
     facet_wrap(~feat) +
     theme(strip.text = element_text(size=20),
           legend.position = "none",panel.grid.minor = element_blank(),
-          panel.border = element_rect(fill = 'transparent')) +
+          panel.border = element_rect(fill = 'transparent'),
+          axis.text.x = element_text(angle = 90, vjust = 1, hjust=1,size=8)) +
     labs(x = "grouped slices", y = "allelic ratio") +
     scale_x_continuous(breaks = seq_len(19))
 }
@@ -123,13 +124,14 @@ sce_sub <- fusedLasso(sce, formula=f,adj.matrix = list(x = b2),
   )
 metadata(sce_sub)
 sce_sub <- allelicRatio(sce_sub)
+## for visualization, remove gene "ICA69"
 p <- makeStep(sce_sub,xlab = "grouped slices")
 gene <- rownames(sce_sub)
-q <- plotGene(gene)
+q <- plotGene(gene[-6])
 
-# jpeg(file="C:/Users/wancenmu/OneDrive - University of North Carolina at Chapel Hill/Lab/Github/airpartpaper/plot/60_cl10orig.jpeg",width = 8, height = 7,units = "in",res=360)
-# orig
-# dev.off()
+jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/60_cl10airpart.jpeg",width = 8, height = 6,units = "in",res=360)
+p
+dev.off()
 metadata(sce_sub)
 sce_sub <- allelicRatio(sce_sub)
 s<-extractResult(sce_sub,"svalue")
@@ -219,9 +221,10 @@ p <- ggplot2::ggplot(part, aes(x = .data$x, y = .data$coef)) +
   ylim(low,up) +
   theme_minimal() +
   theme(
-    legend.position = "bottom",
+    legend.position = "right",
     panel.grid.minor = element_blank(),
-    panel.border = element_rect(fill = "transparent")
+    panel.border = element_rect(fill = "transparent"),
+    axis.text.x = element_text(angle = 90, vjust = 1, hjust=1,size=8)
   ) +
   labs(x = "grouped slices", y = "allelic ratio")
 p

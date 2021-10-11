@@ -41,6 +41,30 @@ scdali_res <- ifelse(scdali<0.1,TRUE,FALSE)
 true <- rep(c(1,2),each=400)
 table(scdali_res,true)/400
 
+t_fl <- system.time(
+  fl <- pbsapply(1:nrow(sce), function(i) {
+    res <- tryCatch({
+      sce_sub <- sce[i,]
+      sce_sub$part <- factor(rep(seq_len(nct),each=n))
+      sce_sub <- allelicRatio(sce_sub)
+      est <- extractResult(sce_sub)%>% as.matrix()
+      up <- extractResult(sce_sub,estimates = "upper")%>% as.matrix()
+      low <- extractResult(sce_sub,estimates = "lower")%>% as.matrix()
+      return(c(est,up,low))
+    }, error = function(e) {return(rep(NA,3*nct)) })
+  },cl=20))[[3]]
+upper <-fl[(nct+1):(2*nct),]
+lower <-fl[(2*nct+1):(3*nct),]
+min = colMins(upper)
+max = colMaxs(lower)
+low <- sapply(1:ncol(lower), function(i){
+  ifelse(sum(min[i]<lower[,i])==0,return(FALSE),return(TRUE))
+})
+up <- sapply(1:ncol(upper), function(i){
+  ifelse(sum(max[i]>upper[,i])==0,return(FALSE),return(TRUE))
+})
+fl_res <-low*up
+table(fl_res,true)/400
 
 #fused lasso
 t_fl_binomial <- system.time(

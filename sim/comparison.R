@@ -38,23 +38,13 @@ rowData(sce)$cluster <- seq_len(dim(sce)[1])
 ase <- assays(sce)[["a1"]]
 cts <- assays(sce)[["counts"]]
 x<-rep(seq_len(nct),each=n)
-np.x<-np_array(x,dtype = "float64")
+np.x<-np_array(x,dtype = "int")
 np.ase<-np_array(t(ase),dtype = "float64")
 np.cts<-np_array(t(cts),dtype = "float64")
 loc <-testsig(np.ase,np.cts,np.x,1)
 # x_start<-seq(1,240,30)
 t_dali <- system.time(
-  scdali <- pbsapply(1:nrow(sce), function(i) {
-    np.ase<-np_array(t(ase[i,]),dtype = "float64")
-    np.ase <- array_reshape(np.ase, c(n*nct,1))
-    np.cts<-np_array(t(cts[i,]),dtype = "float64")
-    np.cts <- array_reshape(np.cts, c(n*nct,1))
-    res <- tryCatch({
-      obj <-practice(np.ase,np.cts,np.x,ncores=1)
-      obj <- do.call(c,obj)
-      return(obj)
-    }, error = function(e) {return(rep(NA,2*n*nct)) })
-  }))[[3]]
+      scdali <-practice(np.ase,np.cts,np.x,ncores=1))[[3]]
 # sig<-obj[[1]]+1
 # obj2<-obj[[2]][x_start,]
 # diff_scdali <- sig_true-t(obj2)

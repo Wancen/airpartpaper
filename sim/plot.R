@@ -2,7 +2,8 @@
 library(patchwork)
 library(tidyr)
 library(dplyr)
-load("C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/scdali/default_n40_rbf.rda")
+library(ggsci)
+load("C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/scdali/default_n40.rda")
 nct <-8
 n=40
 true <- (rowData(sce)[,1:nct]) %>% as.data.frame()
@@ -14,6 +15,14 @@ sum(is.na(colSums(mu)))
 sd<-sd_scdali[x_start,]
 diff_scdali <- true-t(mu)
 rmse_scdali<-sqrt(rowMeans(diff_scdali^2))
+
+fl_mean <- fl[1:nct,]
+sum(is.na(colSums(fl_mean)))
+upper <-fl[(nct+1):(2*nct),]
+lower <-fl[(2*nct+1):(3*nct),]
+diff_fl <- true-t(fl_mean)
+rmse_fl<-sqrt(rowMeans(diff_fl^2))
+
 
 fl_binomial_mean <- fl_binomial[1:nct,]
 sum(is.na(colSums(fl_binomial_mean)))
@@ -34,28 +43,7 @@ upper_wilcoxon <-wilcoxon[(nct+1):(2*nct),]
 lower_wilcoxon <-wilcoxon[(2*nct+1):(3*nct),]
 diff_wilcoxon <- true-t(wilcoxon_mean)
 rmse_wilcoxon<-sqrt(rowMeans(diff_wilcoxon^2))
-load("C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/scdali/ungroup.rda")
-nct <-8
-n=40
-true <- (rowData(sce)[,1:nct]) %>% as.data.frame()
-x_start<-seq(1,n*nct,n)
-ar_scdali<-scdali[1:(nct*n),]
-sd_scdali<-scdali[(nct*n+1):(2*nct*n),]
-mu<-ar_scdali[x_start,]
-sum(is.na(colSums(mu)))
-sd<-sd_scdali[x_start,]
-diff_scdali <- true-t(mu)
-rmse_scdali<-sqrt(rowMeans(diff_scdali^2))
 
-fl <- fl_binomial
-t_fl <- t_fl_binomial
-fl_mean <- fl[1:nct,]
-sum(is.na(colSums(fl_mean)))
-upper <-fl[(nct+1):(2*nct),]
-lower <-fl[(2*nct+1):(3*nct),]
-
-diff_fl <- true-t(fl_mean)
-rmse_fl<-sqrt(rowMeans(diff_fl^2))
 
 dat <- data.frame(rmse_fl_binom=rmse_fl_binom,
                   rmse_fl_gaussian=rmse_fl_gaussian,
@@ -117,7 +105,7 @@ p1.2<- ggplot() +
   scale_x_discrete(breaks=paste(rep(c("airpart.nogroup","scdali"),each=nct),rep(paste0("ct",1:nct),2),sep = "."),
                    labels=rep(c(paste0("ct",1:nct)),2))
 p1.2
-pcompare <- p1 + inset_element(p1.2, left = 0.4, bottom = 0.55, right = 0.995, top = 0.995)
+# pcompare <- p1 + inset_element(p1.2, left = 0.4, bottom = 0.55, right = 0.995, top = 0.995)
 
 
 l5 <- lapply(list.files(path="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/scdali/csv", full=TRUE), function(f) {
@@ -146,7 +134,7 @@ p2<-ggplot(dat5.2, aes(x=method,y=ARI,fill=method)) +
         axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size=8))
 
 jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/plots/main1.jpg",width = 12, height = 7,units = "in",res=450)
-p2+pcompare+ plot_annotation(tag_levels = 'A')
+p2+p1/p1.2+ plot_annotation(tag_levels = 'A') + plot_layout(guides = 'collect')
 dev.off()
 
 ## theta=3 in supp
@@ -192,10 +180,10 @@ jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hil
 p3+p2+ plot_annotation(tag_levels = 'A')
 dev.off()
 
-## supp2 n=60
-load("C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/scdali/default_n60_rbf.rda")
+## supp2 n=100
+load("C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/scdali/default_n100.rda")
 nct <-8
-n=60
+n=100
 true <- (rowData(sce)[,1:nct]) %>% as.data.frame()
 x_start<-seq(1,n*nct,n)
 ar_scdali<-scdali[1:(n*8),]
@@ -293,7 +281,7 @@ datci2<-datci %>% gather(key=type,value=coverage,scdali.ct1:wilcoxon.ct8)
 datci2 <- datci2[!is.na(datci2$coverage),]
 library(dplyr)
 detach("package:plyranges", unload=TRUE)
-datci2<-datci2%>% group_by(ar,type) %>% dplyr::summarise(coverge=sum(coverage,na.rm=T)/n())
+datci2<-datci2%>% group_by(ar,type) %>% dplyr::summarise(coverage=sum(coverage,na.rm=T)/n())
 datci2$type <- factor(datci2$type,ordered = F, levels = paste(rep(c("binomial","gaussian","wilcoxon","nogroup","scdali"),each=nct),rep(paste0("ct",1:nct),5),sep = "."),
                       labels  = paste(rep(c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"),each=nct),rep(paste0("ct",1:nct),5),sep = "."))
 datci2$method <- rep(c(rep("airpart.bin",nct),rep("airpart.gau",nct),rep("airpart.nogroup",nct),rep("scdali",nct),rep("airpart.np",nct)),length(ardiff))
@@ -302,7 +290,7 @@ datci2$method <- factor(datci2$method,ordered = T, levels = c("airpart.bin","air
                       labels  = c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"))
 library(ggplot2)
 library(ggsci)
-pci40<-ggplot(datci2,mapping = aes(x=type,y=coverge,fill=method)) +
+pci40<-ggplot(datci2,mapping = aes(x=type,y=coverage,fill=method)) +
   geom_bar(stat="identity") +
   theme_minimal() +
   scale_fill_igv()+
@@ -317,7 +305,7 @@ pci40<-ggplot(datci2,mapping = aes(x=type,y=coverge,fill=method)) +
                    labels=rep(c(paste0("ct",1:nct)),5))
 pci40
 
-pci60<-ggplot(datci2,mapping = aes(x=type,y=coverge,fill=method)) +
+pci100<-ggplot(datci2,mapping = aes(x=type,y=coverage,fill=method)) +
   geom_bar(stat="identity") +
   theme_minimal() +
   scale_fill_igv()+
@@ -330,8 +318,8 @@ pci60<-ggplot(datci2,mapping = aes(x=type,y=coverge,fill=method)) +
   facet_wrap(~ar)+
   scale_x_discrete(breaks=paste(rep(c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"),each=nct),rep(paste0("ct",1:nct),5),sep = "."),
                    labels=rep(c(paste0("ct",1:nct)),5))
-jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/suppsim2.jpg",width = 14, height = 10,units = "in",res=450)
-p1+ pci40 / pci60 + plot_annotation(tag_levels = 'A')
+jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/suppsim2_new.jpg",width = 14, height = 10,units = "in",res=450)
+p1+ pci40 / pci100 + plot_annotation(tag_levels = 'A')
 dev.off()
 
 

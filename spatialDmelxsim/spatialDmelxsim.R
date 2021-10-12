@@ -1,6 +1,7 @@
 # The way we pre-filter the genes by QC and LRT and save the result in "./data/spatial.RData"
 
-# load("./data/spatialDmelxsim.rda")
+# library(spatialDmelxsim)
+# sce <- spatialDmelxsim()
 # # Find correlation
 # library(SingleCellExperiment)
 # library(airpart)

@@ -133,6 +133,18 @@ p2<-ggplot(dat5.2, aes(x=method,y=ARI,fill=method)) +
         panel.border = element_rect(fill = 'transparent'),
         axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size=8))
 
+p3<-ggplot(dat5.2, aes(x=method,y=time,fill=method)) +
+  geom_boxplot(outlier.color=NA)+
+  geom_jitter(width=.1,size=0.2)+
+  facet_grid(g ~ cnt, labeller = label_both)+
+  # scale_fill_brewer(palette = "Paired")+
+  scale_fill_igv()+
+  theme_classic() +
+  ylab("time(s)")+ ylim(0,50)+
+  theme(legend.position = "none",panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = 'transparent'),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size=8))
+
 jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/plots/main1.jpg",width = 12, height = 7,units = "in",res=450)
 p2+p1/p1.2+ plot_annotation(tag_levels = 'A') + plot_layout(guides = 'collect')
 dev.off()
@@ -153,7 +165,7 @@ dat5.2$method<-factor(dat5.2$method)
 # p2<- ggplot(dat5.2, aes(x=ARI,fill=method)) +
 p2<-ggplot(dat5.2, aes(x=method,y=ARI,fill=method)) +
   geom_boxplot()+
-  geom_jitter(width=.1,size=0.2)+
+  # geom_jitter(width=.1,size=0.2)+
   # geom_bar(aes(y = ..prop..), position="dodge", width=0.15) +scale_x_continuous(limits=c(0, 1.08), breaks=c(0, 0.25, 0.5, 0.75,1))+
   # scale_y_continuous(labels = scales::percent,limits=c(0, 1)) +
   facet_grid(g ~ cnt, labeller = label_both)+
@@ -165,17 +177,7 @@ p2<-ggplot(dat5.2, aes(x=method,y=ARI,fill=method)) +
         panel.border = element_rect(fill = 'transparent'),
         axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size=8))
 
-p3<-ggplot(dat5.2, aes(x=method,y=time,fill=method)) +
-  geom_boxplot(outlier.color=NA)+
-  geom_jitter(width=.1,size=0.2)+
-  facet_grid(g ~ cnt, labeller = label_both)+
-  # scale_fill_brewer(palette = "Paired")+
-  scale_fill_igv()+
-  theme_classic() +
-  ylab("time(s)")+ ylim(0,50)+
-  theme(legend.position = "none",panel.grid.minor = element_blank(),
-        panel.border = element_rect(fill = 'transparent'),
-        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size=8))
+
 jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/plot/suppsim1.jpg",width = 12, height = 8,units = "in",res=450)
 p3+p2+ plot_annotation(tag_levels = 'A')
 dev.off()

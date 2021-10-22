@@ -230,53 +230,14 @@ p <- ggplot2::ggplot(part, aes(x = .data$x, y = .data$coef)) +
   labs(x = "grouped slices", y = "allelic ratio")
 p
 
-## no group step ##############################
+## no group step, smoothing splines ##############################
 sce_sub <- sce[rowData(sce)$cluster==10]
-sce_sub$part <- sce_sub$x
-## construct basis function
-x <- ns(sce$part %>% as.numeric(),df=5,intercept = T)
-## derive per gene theta
-theta.hat <- matrix(rep(100, dim(sce)[1]))
-maxDisp <- 75
-niter <- 5
-for (i in seq_len(niter)) {
-  param <- cbind(theta.hat[, 1], assays(sce)[["counts"]])
-  fit.mle <- apeglm(
-    Y = assays(sce)[["a1"]], x = x, log.lik = NULL,
-    param = param, no.shrink = TRUE, log.link = FALSE,
-    method = "betabinCR", interval.level = level,
-  )
-  theta.hat <- bbEstDisp(
-    success = assays(sce)[["a1"]],
-    size = assays(sce)[["counts"]], x = x,
-    beta = fit.mle$map, minDisp = .01, maxDisp = maxDisp, se = TRUE
-  )
-}
-theta <- theta.hat[, 1]
-se <- theta.hat[, 2]
-## approximate shrinkage using a formula in the style of
-# Efron and Morris's hierarchical model of normals
-log_disp <- log(theta)
-sigma_sampling2 <- mean(se^2)
-sigma_prior2 <- max((var(log_disp) - sigma_sampling2), 0)
-B <- as.numeric((sigma_sampling2) / (sigma_prior2 + sigma_sampling2))
-log_disp_0 <- mean(log_disp)
-theta2 <- exp((1 - B) * log_disp + B * log_disp_0)
-param <- cbind(theta2, assays(sce)[["counts"]])
-
-# re-fit model without shrink
-fit.post <- apeglm(
-  Y = assays(sce)[["a1"]], x = x, log.lik = NULL,
-  param = param, no.shrink = TRUE, log.link = FALSE,
-  method = "betabinCR", interval.level = 0.95,
-)
-coef = fit.post$map
-ratio <- inv.logit(coef %*% t(x))
-ratio2 <- ratio[,!duplicated(ratio[1,])]
-
+f <- ratio ~ ns(x, df = 5)
+sce_sub <- allelicRatio(sce_sub, f)
+ar <-extractResult(sce_sub) %>% as.matrix()
 
 library(reshape2)
-ar_long <- melt(ratio2, id = "slice", value.name = "ar") %>% `colnames<-`(c("gene","slice","ar"))
+ar_long <- melt(ar, id = "slice", value.name = "ar") %>% `colnames<-`(c("gene","slice","ar"))
 ar_long$slice <- factor(ar_long$slice)
 nogroup<-ggplot(ar_long %>% filter(gene!="ICA69"), aes(x = slice,y = ar)) +
   geom_point() +

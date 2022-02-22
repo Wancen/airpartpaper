@@ -3,21 +3,91 @@ library(patchwork)
 library(tidyr)
 library(dplyr)
 library(ggsci)
+library(ggplot2)
+## draw main plot with missclassfication
+l5 <- lapply(list.files(path="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/data/csv", full=TRUE), function(f) {
+  read.csv(f, header=FALSE)
+})
+dat5 <- do.call(rbind, l5)
+colnames(dat5) <- c("type","ARI","time","g","cnt","missclass")
+dat5.2<-dat5%>% filter(cnt%in%c(5,10,20)&type%in%c("airpart.bin","airpart.gau","airpart.np")&g%in%c(10,50,100,500))
+str(dat5.2)
+# dat5.2$type <- ifelse(dat5.2$type=="fl_binomial","airpart.bin",ifelse(dat5.2$type=="fl_gaussian","airpart.gau","airpart.np"))
+colnames(dat5.2) <- c("method","ARI","time","g","cnt","missclass")
+dat5.2$method<-factor(dat5.2$method)
+dat5.2$g<-factor(dat5.2$g,ordered = F, levels = c("10","25","50","100","500"))
+dat5.2$cnt<-factor(dat5.2$cnt,ordered = F, levels = c("5","10","20"))
+dat5.2$missclass<-factor(dat5.2$missclass,ordered = F, levels = c("0","5","10"))
+dat5.2$ARI <- dat5.2$ARI %>% as.numeric()
+dat5.2$time <- dat5.2$time %>% as.numeric()
+# p2<- ggplot(dat5.2, aes(x=ARI,fill=method)) +
+pmain1 <- ggplot(dat5.2 %>% filter(missclass=="0" & g!="500"), aes(x=method,y=ARI,fill=method)) +
+  geom_boxplot()+
+  # geom_bar(aes(y = ..prop..), position="dodge", width=0.15) +scale_x_continuous(limits=c(0, 1.08), breaks=c(0, 0.25, 0.5, 0.75,1))+
+  # scale_y_continuous(labels = scales::percent,limits=c(0, 1)) +
+  facet_grid(g ~ cnt, labeller = label_both)+
+  # scale_fill_brewer(palette = "Paired")+
+  scale_fill_igv()+
+  theme_classic() +
+  ylab("ARI")+
+  theme(legend.position = "none",panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = 'transparent'),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size=12),
+        strip.text.x = element_text(size = 10))
+# alternative: bar plot
+p2<-ggplot(dat5.2 %>% filter(missclass=="0" & g!="500"), aes(x=ARI,fill=method)) +
+  # ggplot(dat5.2, aes(x=method,y=ARI,fill=method)) +
+  # geom_boxplot()+
+  geom_bar(aes(y = ..prop..), position="dodge", width=0.1) +scale_x_continuous(limits=c(0, 1.08), breaks=c(0, 0.25, 0.5, 0.75,1))+
+  scale_y_continuous(labels = scales::percent,limits=c(0, 1)) +
+  facet_grid(g ~ cnt, labeller = label_both)+
+  # scale_fill_brewer(palette = "Paired")+
+  scale_fill_igv()+
+  theme_classic() +
+  ylab("ARI")+
+  theme(legend.position = "none",panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = 'transparent'),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size=8))
+# time plot
+p3<-ggplot(dat5.2 %>% filter(g!="500"), aes(x=method,y=time,fill=method)) +
+  geom_boxplot(outlier.color=NA)+
+  geom_jitter(width=.1,size=0.2)+
+  facet_grid(g ~ cnt+missclass, labeller = label_both)+
+  scale_fill_igv()+
+  theme_classic() +
+  ylab("time(s)")+
+  ylim(0,130)+
+  theme(legend.position = "none",panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = 'transparent'),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size=12),
+        strip.text.x = element_text(size = 10))
+jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/plots/time_cluster.jpg",width = 16, height = 12,units = "in",res=450)
+p3
+dev.off()
+
+jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/plots/main1_v.jpg",width = 10, height = 11,units = "in",res=450)
+pmain1/(p1+p1.2)+ plot_annotation(tag_levels = 'A') + plot_layout(guides = 'collect')
+dev.off()
+
+## compare with scdali
+# load("C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/data/n40_manumiss10.rda")
 load("C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/scdali/default_n40.rda")
 nct <-8
 n=40
 true <- (rowData(sce)[,1:nct]) %>% as.data.frame()
-x_start<-seq(1,n*nct,n)
-ar_scdali<-scdali[1:320,]
-sd_scdali<-scdali[321:640,]
+x_start<-seq(n,n*nct,n)
+# ar_scdali<-scdali[[1]]
+# sd_scdali <- scdali[[2]]
+ar_scdali<-scdali[1:(n*nct),]
+sd_scdali<-scdali[(n*nct+1):(2*n*nct),]
 mu<-ar_scdali[x_start,]
-sum(is.na(colSums(mu)))
 sd<-sd_scdali[x_start,]
 diff_scdali <- true-t(mu)
 rmse_scdali<-sqrt(rowMeans(diff_scdali^2))
 
 fl_mean <- fl[1:nct,]
 sum(is.na(colSums(fl_mean)))
+
 upper <-fl[(nct+1):(2*nct),]
 lower <-fl[(2*nct+1):(3*nct),]
 diff_fl <- true-t(fl_mean)
@@ -62,6 +132,10 @@ dat2  %>% group_by(method,type) %>% summarise(fail=sum(is.na(rmse))/4)
 #                       labels  = c("airpart","scdali"))
 dat2$method <- factor(dat2$method,ordered = T, levels = c("rmse_fl_binom","rmse_fl_gaussian","rmse_wilcoxon","rmse_fl","rmse_scdali"),
                       labels  = c("airpart.bin","airpart.gau","airpart.np","airpart.nogroup","scdali"))
+dat2$misclass <- 10
+dat40_miss5 <- dat2
+dat3$misclass <-0
+datc<-rbind(dat40_miss5,dat3,dat2)
 
 mu_0.3 <- t(mu[,801:1200]) %>% `colnames<-`(paste("scdali",paste0("ct",1:8)))
 binomal_0.3 <- t(fl_binomial_mean[,801:1200])%>% `colnames<-`(paste("binomial",paste0("ct",1:8)))
@@ -81,15 +155,21 @@ dat_true <- data.frame(type=levels(dat2_0.3$type),true=rep(as.numeric(true[801,]
 
 p1<-ggplot(dat2,mapping = aes(x=type,y=rmse,fill=method)) +
   geom_boxplot()+
-  theme_classic() +
+  theme_minimal() +
   scale_fill_igv()+
+  # facet_grid(~misclass,labeller = label_both)+
   # scale_fill_jco()+
   theme(legend.position = "right",panel.grid.minor = element_blank(),
-        panel.border = element_rect(fill = 'transparent')) +
+        panel.border = element_rect(fill = 'transparent'),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size=10),
+        strip.text.x = element_text(size = 15)) +
   xlab("Allelic ratio difference")+
   ylab("RMSE")
 # scale_fill_discrete(name="methods", labels=c("airpart.bin","airpart.gau","airpart.np","scdali"))
-p1
+jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/plots/tsne_cluster.jpg",width = 16, height = 12,units = "in",res=450)
+pmain1/ (p1+p1.2)
+dev.off()
+
 p1.2<- ggplot() +
   geom_boxplot(data=dat2_0.3[6401:12800,],mapping = aes(x=type,y=ar,fill=method))+
   geom_point(dat_true[25:40,],mapping = aes(x=type,y=true,col="red")) +
@@ -105,49 +185,10 @@ p1.2<- ggplot() +
   scale_x_discrete(breaks=paste(rep(c("airpart.nogroup","scdali"),each=nct),rep(paste0("ct",1:nct),2),sep = "."),
                    labels=rep(c(paste0("ct",1:nct)),2))
 p1.2
+
 # pcompare <- p1 + inset_element(p1.2, left = 0.4, bottom = 0.55, right = 0.995, top = 0.995)
+# pcompare
 
-
-l5 <- lapply(list.files(path="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/scdali/csv", full=TRUE), function(f) {
-  read.csv(f, header=FALSE)
-})
-dat5 <- do.call(rbind, l5)
-colnames(dat5) <- c("type","ARI","time","g","cnt")
-dat5.2<-dat5%>% filter(cnt%in%c(5,10,20)&type%in%c("fl_binomial","fl_gaussian","WilcoxExt")&g%in%c(5,10,20))
-str(dat5.2)
-dat5.2$type <- ifelse(dat5.2$type=="fl_binomial","airpart.bin",ifelse(dat5.2$type=="fl_gaussian","airpart.gau","airpart.np"))
-
-colnames(dat5.2) <- c("method","ARI","time","g","cnt")
-dat5.2$method<-factor(dat5.2$method)
-# p2<- ggplot(dat5.2, aes(x=ARI,fill=method)) +
-p2<-ggplot(dat5.2, aes(x=method,y=ARI,fill=method)) +
-  geom_boxplot()+
-  # geom_bar(aes(y = ..prop..), position="dodge", width=0.15) +scale_x_continuous(limits=c(0, 1.08), breaks=c(0, 0.25, 0.5, 0.75,1))+
-  # scale_y_continuous(labels = scales::percent,limits=c(0, 1)) +
-  facet_grid(g ~ cnt, labeller = label_both)+
-  # scale_fill_brewer(palette = "Paired")+
-  scale_fill_igv()+
-  theme_classic() +
-  ylab("ARI")+
-  theme(legend.position = "none",panel.grid.minor = element_blank(),
-        panel.border = element_rect(fill = 'transparent'),
-        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size=8))
-
-p3<-ggplot(dat5.2, aes(x=method,y=time,fill=method)) +
-  geom_boxplot(outlier.color=NA)+
-  geom_jitter(width=.1,size=0.2)+
-  facet_grid(g ~ cnt, labeller = label_both)+
-  # scale_fill_brewer(palette = "Paired")+
-  scale_fill_igv()+
-  theme_classic() +
-  ylab("time(s)")+ ylim(0,50)+
-  theme(legend.position = "none",panel.grid.minor = element_blank(),
-        panel.border = element_rect(fill = 'transparent'),
-        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size=8))
-
-jpeg(file="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/plots/main1.jpg",width = 12, height = 7,units = "in",res=450)
-p2+p1/p1.2+ plot_annotation(tag_levels = 'A') + plot_layout(guides = 'collect')
-dev.off()
 
 ## theta=3 in supp
 l5 <- lapply(list.files(path="C:/Users/wancen/OneDrive - University of North Carolina at Chapel Hill/Lab/GRA/project1/scdali/csv", full=TRUE), function(f) {
